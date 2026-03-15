@@ -1,8 +1,11 @@
 import { type FastifyPluginAsync } from 'fastify';
 import { emailService } from './email.service.js';
 import { mailService } from '../mail/mail.service.js';
+import { tokenRefreshService } from './token-refresh.service.js';
 import { createEmailSchema, updateEmailSchema, listEmailSchema, importEmailSchema } from './email.schema.js';
 import { z } from 'zod';
+import { AppError } from '../../plugins/error.js';
+import { getTokenRefreshJobNextRunAt, refreshTokenRefreshJobSchedule } from '../../jobs/token-refresh.js';
 
 const emailRoutes: FastifyPluginAsync = async (fastify) => {
     // 所有路由需要 JWT 认证
@@ -111,7 +114,83 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
         const result = await mailService.processMailbox(credentials, { mailbox: mailbox || 'INBOX' });
         return { success: true, data: result };
     });
+
+    // ========================================
+    // Token 刷新 - 批量刷新所有未禁用邮箱的 Token
+    // ========================================
+    fastify.post('/refresh-tokens', async (request) => {
+        const body = z.object({
+            groupId: z.number().int().positive().optional(),
+        }).optional().parse(request.body);
+
+        const stats = tokenRefreshService.getRefreshStats();
+        if (stats.isRunning) {
+            throw new AppError('REFRESH_IN_PROGRESS', 'Token refresh is already running', 409);
+        }
+
+        // 异步执行，不阻塞请求
+        void tokenRefreshService.refreshAll({ groupId: body?.groupId }).catch((err) => {
+            request.log.error({ err, groupId: body?.groupId }, 'Manual token refresh failed');
+        });
+        return { success: true, data: { message: 'Token refresh started' } };
+    });
+
+    fastify.put('/refresh-settings', async (request) => {
+        const input = z.object({
+            enabled: z.boolean(),
+            intervalHours: z.coerce.number().int().min(1).max(24 * 30),
+            concurrency: z.coerce.number().int().min(1).max(50),
+        }).parse(request.body);
+
+        const settings = await tokenRefreshService.updateTokenRefreshConfig(input);
+        await refreshTokenRefreshJobSchedule();
+
+        return { success: true, data: settings };
+    });
+
+    // ========================================
+    // Token 刷新 - 单个邮箱
+    // ========================================
+    fastify.post('/:id/refresh-token', async (request) => {
+        const { id } = request.params as { id: string };
+        const result = await tokenRefreshService.refreshSingleToken(parseInt(id));
+        return { success: true, data: result };
+    });
+
+    // ========================================
+    // Token 刷新状态查询
+    // ========================================
+    fastify.get('/refresh-status', async () => {
+        const settings = await tokenRefreshService.getTokenRefreshConfig();
+        const stats = tokenRefreshService.getRefreshStats(getTokenRefreshJobNextRunAt());
+        return {
+            success: true,
+            data: {
+                enabled: settings.enabled,
+                intervalHours: settings.intervalHours,
+                concurrency: settings.concurrency,
+                lastRunAt: stats.lastRunAt,
+                nextRunAt: stats.nextRunAt,
+                isRunning: stats.isRunning,
+                lastResult: stats.lastResult ? {
+                    total: stats.lastResult.total,
+                    success: stats.lastResult.success,
+                    failed: stats.lastResult.failed,
+                    durationMs: stats.lastResult.durationMs,
+                } : null,
+                currentRun: stats.currentRun ? {
+                    total: stats.currentRun.total,
+                    completed: stats.currentRun.completed,
+                    success: stats.currentRun.success,
+                    failed: stats.currentRun.failed,
+                    startedAt: stats.currentRun.startedAt,
+                    durationMs: stats.currentRun.durationMs,
+                    recentFailures: stats.currentRun.recentFailures,
+                } : null,
+                recentFailures: stats.recentFailures,
+            },
+        };
+    });
 };
 
 export default emailRoutes;
-

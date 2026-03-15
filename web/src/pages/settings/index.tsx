@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Card, Form, Input, Button, message, Typography, Space, Tag, Alert, QRCode } from 'antd';
-import { LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
-import { authApi } from '../../api';
+import { Card, Form, Input, Button, message, Typography, Space, Tag, Alert, QRCode, Switch, InputNumber, Progress } from 'antd';
+import { LockOutlined, SafetyCertificateOutlined, ReloadOutlined, SyncOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { authApi, emailApi } from '../../api';
 import { useAuthStore } from '../../stores/authStore';
 import { getAdminRoleLabel } from '../../utils/auth';
 import { requestData } from '../../utils/request';
@@ -14,6 +15,40 @@ interface TwoFactorStatus {
     legacyEnv: boolean;
 }
 
+interface TokenRefreshFailure {
+    emailId: number;
+    email: string;
+    success: boolean;
+    message: string;
+}
+
+interface TokenRefreshCurrentRun {
+    total: number;
+    completed: number;
+    success: number;
+    failed: number;
+    startedAt: string;
+    durationMs: number;
+    recentFailures: TokenRefreshFailure[];
+}
+
+interface TokenRefreshStatus {
+    enabled: boolean;
+    intervalHours: number;
+    concurrency: number;
+    lastRunAt: string | null;
+    nextRunAt: string | null;
+    isRunning: boolean;
+    lastResult: {
+        total: number;
+        success: number;
+        failed: number;
+        durationMs: number;
+    } | null;
+    currentRun: TokenRefreshCurrentRun | null;
+    recentFailures: TokenRefreshFailure[];
+}
+
 const SettingsPage: React.FC = () => {
     const [passwordLoading, setPasswordLoading] = useState(false);
     const [twoFactorLoading, setTwoFactorLoading] = useState(false);
@@ -23,10 +58,15 @@ const SettingsPage: React.FC = () => {
         pending: false,
         legacyEnv: false,
     });
+    const [tokenRefreshStatus, setTokenRefreshStatus] = useState<TokenRefreshStatus | null>(null);
     const [setupData, setSetupData] = useState<{ secret: string; otpauthUrl: string } | null>(null);
     const [enableOtp, setEnableOtp] = useState('');
+    const [tokenRefreshStatusLoading, setTokenRefreshStatusLoading] = useState(true);
+    const [tokenRefreshActionLoading, setTokenRefreshActionLoading] = useState(false);
+    const [tokenRefreshSaveLoading, setTokenRefreshSaveLoading] = useState(false);
     const [form] = Form.useForm();
     const [disable2FaForm] = Form.useForm();
+    const [tokenRefreshForm] = Form.useForm();
     const { admin, token, setAuth } = useAuthStore();
 
     const syncStoreTwoFactor = useCallback((enabled: boolean) => {
@@ -51,6 +91,32 @@ const SettingsPage: React.FC = () => {
         }
         setTwoFactorStatusLoading(false);
     };
+
+    const loadTokenRefreshStatus = useCallback(async (silent: boolean = false) => {
+        if (!silent) {
+            setTokenRefreshStatusLoading(true);
+        }
+
+        const result = await requestData<TokenRefreshStatus>(
+            () => emailApi.getRefreshStatus(),
+            '获取 Token 刷新状态失败',
+            { silent }
+        );
+        if (result) {
+            setTokenRefreshStatus(result);
+            if (!silent || !tokenRefreshForm.isFieldsTouched()) {
+                tokenRefreshForm.setFieldsValue({
+                    enabled: result.enabled,
+                    intervalHours: result.intervalHours,
+                    concurrency: result.concurrency,
+                });
+            }
+        }
+
+        if (!silent) {
+            setTokenRefreshStatusLoading(false);
+        }
+    }, [tokenRefreshForm]);
 
     useEffect(() => {
         let cancelled = false;
@@ -78,6 +144,34 @@ const SettingsPage: React.FC = () => {
             cancelled = true;
         };
     }, [syncStoreTwoFactor]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const init = async () => {
+            await loadTokenRefreshStatus(true);
+            if (!cancelled) {
+                setTokenRefreshStatusLoading(false);
+            }
+        };
+
+        void init();
+        return () => {
+            cancelled = true;
+        };
+    }, [loadTokenRefreshStatus]);
+
+    useEffect(() => {
+        if (!tokenRefreshStatus?.isRunning) {
+            return;
+        }
+
+        const timer = window.setInterval(() => {
+            void loadTokenRefreshStatus(true);
+        }, 5000);
+
+        return () => window.clearInterval(timer);
+    }, [loadTokenRefreshStatus, tokenRefreshStatus?.isRunning]);
 
     const handleChangePassword = async (values: {
         oldPassword: string;
@@ -149,6 +243,73 @@ const SettingsPage: React.FC = () => {
         }
         setTwoFactorLoading(false);
     };
+
+    const handleRunTokenRefresh = async () => {
+        setTokenRefreshActionLoading(true);
+        const result = await requestData<{ message?: string }>(
+            () => emailApi.refreshTokens(),
+            '启动 Token 刷新失败'
+        );
+        if (result) {
+            message.success(result.message || 'Token 刷新任务已启动');
+            await loadTokenRefreshStatus(true);
+        }
+        setTokenRefreshActionLoading(false);
+    };
+
+    const handleSaveTokenRefreshSettings = async () => {
+        try {
+            const values = await tokenRefreshForm.validateFields();
+            setTokenRefreshSaveLoading(true);
+            const result = await requestData<{ enabled: boolean; intervalHours: number; concurrency: number }>(
+                () => emailApi.updateRefreshSettings({
+                    enabled: Boolean(values.enabled),
+                    intervalHours: Number(values.intervalHours),
+                    concurrency: Number(values.concurrency),
+                }),
+                '保存 Token 自动刷新配置失败'
+            );
+
+            if (result) {
+                message.success('Token 自动刷新配置已保存');
+                tokenRefreshForm.setFieldsValue({
+                    enabled: result.enabled,
+                    intervalHours: result.intervalHours,
+                    concurrency: result.concurrency,
+                });
+                await loadTokenRefreshStatus();
+            }
+        } finally {
+            setTokenRefreshSaveLoading(false);
+        }
+    };
+
+    const formatDateTime = (value: string | null | undefined) => {
+        if (!value) {
+            return '暂无';
+        }
+        return dayjs(value).format('YYYY-MM-DD HH:mm:ss');
+    };
+
+    const formatDuration = (durationMs: number | null | undefined) => {
+        if (!durationMs || durationMs <= 0) {
+            return '0 秒';
+        }
+
+        const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        if (minutes === 0) {
+            return `${totalSeconds} 秒`;
+        }
+
+        return `${minutes} 分 ${seconds} 秒`;
+    };
+
+    const progressPercent = tokenRefreshStatus?.currentRun?.total
+        ? Math.min(100, Math.round((tokenRefreshStatus.currentRun.completed / tokenRefreshStatus.currentRun.total) * 100))
+        : 0;
 
     return (
         <div>
@@ -316,6 +477,200 @@ const SettingsPage: React.FC = () => {
                                 </Card>
                             ) : null}
                         </Space>
+                    )}
+                </Card>
+
+                <Card title="Token 自动刷新">
+                    {tokenRefreshStatusLoading ? (
+                        <Text type="secondary">加载中...</Text>
+                    ) : tokenRefreshStatus ? (
+                        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                            <div>
+                                <Text type="secondary">自动任务：</Text>{' '}
+                                {tokenRefreshStatus.enabled ? <Tag color="success">已启用</Tag> : <Tag>已停用</Tag>}
+                                {tokenRefreshStatus.isRunning ? <Tag color="processing">运行中</Tag> : <Tag>空闲</Tag>}
+                            </div>
+
+                            <div style={{ display: 'grid', gap: 12 }}>
+                                <div>
+                                    <Text type="secondary">当前配置</Text>
+                                    <div style={{ fontSize: 16 }}>
+                                        每 {tokenRefreshStatus.intervalHours} 小时执行一次，并发 {tokenRefreshStatus.concurrency}
+                                    </div>
+                                </div>
+                                <div>
+                                    <Text type="secondary">上次执行</Text>
+                                    <div style={{ fontSize: 16 }}>{formatDateTime(tokenRefreshStatus.lastRunAt)}</div>
+                                </div>
+                                <div>
+                                    <Text type="secondary">下次计划</Text>
+                                    <div style={{ fontSize: 16 }}>
+                                        {tokenRefreshStatus.enabled ? formatDateTime(tokenRefreshStatus.nextRunAt) : '自动任务已停用'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {tokenRefreshStatus.lastResult ? (
+                                <Alert
+                                    type={tokenRefreshStatus.lastResult.failed > 0 ? 'warning' : 'success'}
+                                    showIcon
+                                    message={`最近一次执行: 成功 ${tokenRefreshStatus.lastResult.success} / 失败 ${tokenRefreshStatus.lastResult.failed} / 总计 ${tokenRefreshStatus.lastResult.total}`}
+                                    description={`耗时 ${formatDuration(tokenRefreshStatus.lastResult.durationMs)}`}
+                                />
+                            ) : (
+                                <Text type="secondary">暂无执行记录</Text>
+                            )}
+
+                            {tokenRefreshStatus.currentRun ? (
+                                <Card size="small" title="运行中进度">
+                                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                                        <Progress
+                                            percent={progressPercent}
+                                            status="active"
+                                            format={() => `${tokenRefreshStatus.currentRun?.completed ?? 0} / ${tokenRefreshStatus.currentRun?.total ?? 0}`}
+                                        />
+                                        <div style={{ display: 'grid', gap: 12 }}>
+                                            <div>
+                                                <Text type="secondary">开始时间</Text>
+                                                <div style={{ fontSize: 16 }}>{formatDateTime(tokenRefreshStatus.currentRun.startedAt)}</div>
+                                            </div>
+                                            <div>
+                                                <Text type="secondary">已运行</Text>
+                                                <div style={{ fontSize: 16 }}>{formatDuration(tokenRefreshStatus.currentRun.durationMs)}</div>
+                                            </div>
+                                            <div>
+                                                <Text type="secondary">当前统计</Text>
+                                                <div style={{ fontSize: 16 }}>
+                                                    成功 {tokenRefreshStatus.currentRun.success} / 失败 {tokenRefreshStatus.currentRun.failed} / 待处理 {Math.max(0, tokenRefreshStatus.currentRun.total - tokenRefreshStatus.currentRun.completed)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Space>
+                                </Card>
+                            ) : null}
+
+                            <Card
+                                size="small"
+                                title={tokenRefreshStatus.isRunning ? '当前批次最近失败' : '最近失败明细'}
+                            >
+                                {tokenRefreshStatus.recentFailures.length > 0 ? (
+                                    <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                                        {tokenRefreshStatus.recentFailures.map((failure) => (
+                                            <div
+                                                key={`${failure.emailId}-${failure.email}-${failure.message}`}
+                                                style={{
+                                                    padding: 12,
+                                                    border: '1px solid #f0f0f0',
+                                                    borderRadius: 8,
+                                                    background: '#fff',
+                                                }}
+                                            >
+                                                <div style={{ fontWeight: 500, marginBottom: 4 }}>{failure.email}</div>
+                                                <Text type="secondary">{failure.message}</Text>
+                                            </div>
+                                        ))}
+                                    </Space>
+                                ) : (
+                                    <Text type="secondary">
+                                        {tokenRefreshStatus.isRunning ? '当前批次暂无失败记录' : '最近没有失败记录'}
+                                    </Text>
+                                )}
+                            </Card>
+
+                            <Space wrap>
+                                <Button
+                                    icon={<ReloadOutlined />}
+                                    onClick={() => void loadTokenRefreshStatus()}
+                                    loading={tokenRefreshStatusLoading}
+                                >
+                                    刷新状态
+                                </Button>
+                                <Button
+                                    type="primary"
+                                    icon={<SyncOutlined spin={tokenRefreshActionLoading || tokenRefreshStatus.isRunning} />}
+                                    onClick={handleRunTokenRefresh}
+                                    loading={tokenRefreshActionLoading}
+                                    disabled={tokenRefreshStatus.isRunning}
+                                >
+                                    立即执行一次
+                                </Button>
+                            </Space>
+
+                            <Card size="small" title="自动刷新配置">
+                                <Form
+                                    form={tokenRefreshForm}
+                                    layout="vertical"
+                                    initialValues={{
+                                        enabled: tokenRefreshStatus.enabled,
+                                        intervalHours: tokenRefreshStatus.intervalHours,
+                                        concurrency: tokenRefreshStatus.concurrency,
+                                    }}
+                                >
+                                    <Form.Item
+                                        name="enabled"
+                                        label="启用自动刷新"
+                                        valuePropName="checked"
+                                    >
+                                        <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                                    </Form.Item>
+                                    <Form.Item
+                                        name="intervalHours"
+                                        label="执行间隔（小时）"
+                                        rules={[
+                                            { required: true, message: '请输入执行间隔' },
+                                            {
+                                                validator: (_, value) => {
+                                                    const num = Number(value);
+                                                    if (Number.isInteger(num) && num >= 1 && num <= 24 * 30) {
+                                                        return Promise.resolve();
+                                                    }
+                                                    return Promise.reject(new Error('请输入 1 到 720 之间的整数'));
+                                                },
+                                            },
+                                        ]}
+                                    >
+                                        <InputNumber min={1} max={24 * 30} precision={0} style={{ width: '100%' }} />
+                                    </Form.Item>
+                                    <Form.Item
+                                        name="concurrency"
+                                        label="刷新并发数"
+                                        rules={[
+                                            { required: true, message: '请输入并发数' },
+                                            {
+                                                validator: (_, value) => {
+                                                    const num = Number(value);
+                                                    if (Number.isInteger(num) && num >= 1 && num <= 50) {
+                                                        return Promise.resolve();
+                                                    }
+                                                    return Promise.reject(new Error('请输入 1 到 50 之间的整数'));
+                                                },
+                                            },
+                                        ]}
+                                    >
+                                        <InputNumber min={1} max={50} precision={0} style={{ width: '100%' }} />
+                                    </Form.Item>
+                                    <Form.Item style={{ marginBottom: 0 }}>
+                                        <Button
+                                            type="primary"
+                                            onClick={handleSaveTokenRefreshSettings}
+                                            loading={tokenRefreshSaveLoading}
+                                            disabled={tokenRefreshStatus.isRunning}
+                                        >
+                                            保存自动刷新配置
+                                        </Button>
+                                    </Form.Item>
+                                </Form>
+                            </Card>
+
+                            <Alert
+                                type="info"
+                                showIcon
+                                message="配置保存后立即生效"
+                                description="自动任务会根据新配置重新安排下一次执行，运行中的任务不会被强制中断。"
+                            />
+                        </Space>
+                    ) : (
+                        <Text type="secondary">暂无数据</Text>
                     )}
                 </Card>
 

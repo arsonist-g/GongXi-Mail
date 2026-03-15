@@ -85,6 +85,7 @@ model EmailAccount {
   status       EmailStatus @default(ACTIVE)
   groupId      Int?        @map("group_id")
   lastCheckAt  DateTime?   @map("last_check_at")
+  tokenRefreshedAt DateTime? @map("token_refreshed_at")
   errorMessage String?     @map("error_message") @db.Text
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
@@ -94,6 +95,20 @@ model EmailAccount {
   apiLogs ApiLog[]
 
   @@map("email_accounts")
+}
+
+// ============================================
+// 系统配置
+// ============================================
+model SystemConfig {
+  id                        Int      @id @default(1)
+  tokenRefreshEnabled       Boolean  @default(true) @map("token_refresh_enabled")
+  tokenRefreshIntervalHours Int      @default(12) @map("token_refresh_interval_hours")
+  tokenRefreshConcurrency   Int      @default(10) @map("token_refresh_concurrency")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+
+  @@map("system_config")
 }
 
 // ============================================

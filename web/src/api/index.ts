@@ -523,6 +523,46 @@ export const emailApi = {
         requestPost<{ deletedCount: number }, { mailbox?: string }>(`/admin/emails/${id}/clear`, {
             mailbox,
         }),
+
+    // Token 刷新
+    refreshTokens: (groupId?: number) =>
+        requestPost<{ message: string }, { groupId?: number }>('/admin/emails/refresh-tokens',
+            groupId ? { groupId } : undefined,
+            { invalidatePrefixes: ['/admin/emails'] }
+        ),
+
+    refreshSingleToken: (id: number) =>
+        requestPost<{ emailId: number; email: string; success: boolean; message: string }>(`/admin/emails/${id}/refresh-token`,
+            undefined,
+            { invalidatePrefixes: ['/admin/emails'] }
+        ),
+
+    getRefreshStatus: () =>
+        requestGet<{
+            enabled: boolean;
+            intervalHours: number;
+            concurrency: number;
+            lastRunAt: string | null;
+            nextRunAt: string | null;
+            isRunning: boolean;
+            lastResult: { total: number; success: number; failed: number; durationMs: number } | null;
+            currentRun: {
+                total: number;
+                completed: number;
+                success: number;
+                failed: number;
+                startedAt: string;
+                durationMs: number;
+                recentFailures: Array<{ emailId: number; email: string; success: boolean; message: string }>;
+            } | null;
+            recentFailures: Array<{ emailId: number; email: string; success: boolean; message: string }>;
+        }>('/admin/emails/refresh-status'),
+
+    updateRefreshSettings: (data: { enabled: boolean; intervalHours: number; concurrency: number }) =>
+        requestPut<{ enabled: boolean; intervalHours: number; concurrency: number }, { enabled: boolean; intervalHours: number; concurrency: number }>(
+            '/admin/emails/refresh-settings',
+            data
+        ),
 };
 
 // ========================================

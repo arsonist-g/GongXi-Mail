@@ -3,15 +3,18 @@ import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import prisma from './lib/prisma.js';
 import { startApiLogRetentionJob } from './jobs/api-log-retention.js';
+import { startTokenRefreshJob } from './jobs/token-refresh.js';
 
 async function main() {
     const app = await buildApp();
     let stopApiLogRetentionJob = () => {};
+    let stopTokenRefreshJob = () => {};
 
     // 优雅关闭
     const shutdown = async () => {
         logger.info('Shutting down...');
         stopApiLogRetentionJob();
+        stopTokenRefreshJob();
         await app.close();
         await prisma.$disconnect();
         process.exit(0);
@@ -25,6 +28,7 @@ async function main() {
         await prisma.$connect();
         logger.info('Database connected');
         stopApiLogRetentionJob = startApiLogRetentionJob();
+        stopTokenRefreshJob = startTokenRefreshJob();
 
         // 启动服务器
         await app.listen({ port: env.PORT, host: '0.0.0.0' });

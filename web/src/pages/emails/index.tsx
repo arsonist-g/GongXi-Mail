@@ -28,6 +28,7 @@ import {
     SearchOutlined,
     MailOutlined,
     GroupOutlined,
+    SyncOutlined,
 } from '@ant-design/icons';
 import { emailApi, groupApi } from '../../api';
 import { getErrorMessage } from '../../utils/error';
@@ -71,6 +72,7 @@ interface EmailAccount {
     groupId: number | null;
     group: { id: number; name: string } | null;
     lastCheckAt: string | null;
+    tokenRefreshedAt: string | null;
     errorMessage: string | null;
     createdAt: string;
 }
@@ -128,6 +130,8 @@ const EmailsPage: React.FC = () => {
     const [groupForm] = Form.useForm();
     const [assignGroupModalVisible, setAssignGroupModalVisible] = useState(false);
     const [assignTargetGroupId, setAssignTargetGroupId] = useState<number | undefined>(undefined);
+    const [refreshingTokenIds, setRefreshingTokenIds] = useState<Set<number>>(new Set());
+    const [batchRefreshing, setBatchRefreshing] = useState(false);
     const latestListRequestIdRef = useRef(0);
 
     const toOptionalNumber = (value: unknown): number | undefined => {
@@ -392,6 +396,46 @@ const EmailsPage: React.FC = () => {
         }
     };
 
+    // ========================================
+    // Token refresh handlers
+    // ========================================
+    const handleRefreshToken = useCallback(async (record: EmailAccount) => {
+        setRefreshingTokenIds(prev => new Set(prev).add(record.id));
+        try {
+            const res = await emailApi.refreshSingleToken(record.id);
+            if (res.code === 200 && res.data?.success) {
+                message.success(`${record.email} Token 刷新成功`);
+                fetchData();
+            } else {
+                message.error(res.data?.message || 'Token 刷新失败');
+            }
+        } catch (err: unknown) {
+            message.error(getErrorMessage(err, 'Token 刷新失败'));
+        } finally {
+            setRefreshingTokenIds(prev => {
+                const next = new Set(prev);
+                next.delete(record.id);
+                return next;
+            });
+        }
+    }, [fetchData]);
+
+    const handleBatchRefreshTokens = async () => {
+        setBatchRefreshing(true);
+        try {
+            const res = await emailApi.refreshTokens(filterGroupId);
+            if (res.code === 200) {
+                message.success('批量 Token 刷新任务已启动，请稍后刷新页面查看结果');
+            } else {
+                message.error(res.message || '启动失败');
+            }
+        } catch (err: unknown) {
+            message.error(getErrorMessage(err, '启动失败'));
+        } finally {
+            setBatchRefreshing(false);
+        }
+    };
+
     const handleViewEmailDetail = (record: MailItem) => {
         setEmailDetailSubject(record.subject || '无主题');
         setEmailDetailContent(record.html || record.text || '无内容');
@@ -552,6 +596,13 @@ const EmailsPage: React.FC = () => {
             render: (val: string | null) => (val ? dayjs(val).format('YYYY-MM-DD HH:mm') : '-'),
         },
         {
+            title: 'Token 刷新',
+            dataIndex: 'tokenRefreshedAt',
+            key: 'tokenRefreshedAt',
+            width: 160,
+            render: (val: string | null) => (val ? dayjs(val).format('YYYY-MM-DD HH:mm') : '-'),
+        },
+        {
             title: '创建时间',
             dataIndex: 'createdAt',
             key: 'createdAt',
@@ -564,6 +615,14 @@ const EmailsPage: React.FC = () => {
             width: 240,
             render: (_: unknown, record: EmailAccount) => (
                 <Space>
+                    <Tooltip title="刷新 Token">
+                        <Button
+                            type="text"
+                            icon={<SyncOutlined spin={refreshingTokenIds.has(record.id)} />}
+                            onClick={() => handleRefreshToken(record)}
+                            disabled={refreshingTokenIds.has(record.id) || record.status === 'DISABLED'}
+                        />
+                    </Tooltip>
                     <Tooltip title="收件箱">
                         <Button
                             type="text"
@@ -596,7 +655,7 @@ const EmailsPage: React.FC = () => {
                 </Space>
             ),
         },
-    ], [handleDelete, handleEdit, handleViewMails]);
+    ], [handleDelete, handleEdit, handleRefreshToken, handleViewMails, refreshingTokenIds]);
 
     const rowSelection = useMemo(
         () => ({
@@ -762,6 +821,13 @@ const EmailsPage: React.FC = () => {
                                         />
                                     </Space>
                                     <Space wrap>
+                                        <Button
+                                            icon={<SyncOutlined spin={batchRefreshing} />}
+                                            onClick={handleBatchRefreshTokens}
+                                            loading={batchRefreshing}
+                                        >
+                                            刷新全部 Token
+                                        </Button>
                                         <Button icon={<UploadOutlined />} onClick={() => setImportModalVisible(true)}>
                                             导入
                                         </Button>

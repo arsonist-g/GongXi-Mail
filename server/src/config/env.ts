@@ -37,6 +37,14 @@ const envSchema = z.object({
     // API log retention
     API_LOG_RETENTION_DAYS: z.coerce.number().int().min(1).default(30),
     API_LOG_CLEANUP_INTERVAL_MINUTES: z.coerce.number().int().min(5).default(60),
+
+    // Token refresh
+    TOKEN_REFRESH_ENABLED: z.preprocess(
+        (v) => (typeof v === 'string' ? v.toLowerCase() !== 'false' : v),
+        z.boolean().default(true)
+    ),
+    TOKEN_REFRESH_INTERVAL_HOURS: z.coerce.number().min(1).default(12),
+    TOKEN_REFRESH_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(10),
 });
 
 export type Env = z.infer<typeof envSchema>;
