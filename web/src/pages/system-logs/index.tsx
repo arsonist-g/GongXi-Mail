@@ -14,6 +14,8 @@ interface SystemLogItem {
     id: string;
     time: string;
     level: SystemLogLevel;
+    action: string | null;
+    actorUsername: string | null;
     message: string;
     requestId: string | null;
     trigger: string | null;
@@ -106,6 +108,20 @@ const SystemLogsPage: React.FC = () => {
             render: (level: SystemLogLevel) => <Tag color={getLevelColor(level)}>{level.toUpperCase()}</Tag>,
         },
         {
+            title: '操作',
+            dataIndex: 'action',
+            key: 'action',
+            width: 220,
+            render: (action: string | null) => action ? <Text code>{action}</Text> : <Text type="secondary">-</Text>,
+        },
+        {
+            title: '操作者',
+            dataIndex: 'actorUsername',
+            key: 'actorUsername',
+            width: 140,
+            render: (value: string | null) => value || <Text type="secondary">系统</Text>,
+        },
+        {
             title: '触发',
             dataIndex: 'trigger',
             key: 'trigger',
@@ -120,20 +136,13 @@ const SystemLogsPage: React.FC = () => {
             key: 'message',
             ellipsis: true,
         },
-        {
-            title: 'Request ID',
-            dataIndex: 'requestId',
-            key: 'requestId',
-            width: 220,
-            render: (requestId: string | null) => requestId ? <Text copyable>{requestId}</Text> : <Text type="secondary">-</Text>,
-        },
     ];
 
     return (
         <div>
             <PageHeader
                 title="系统日志"
-                subtitle="查看服务运行日志、任务调度日志和错误日志"
+                subtitle="查看后台业务事件日志，例如新增、修改、删除、刷新和系统任务"
                 extra={(
                     <Button icon={<ReloadOutlined />} onClick={() => void fetchLogs()}>
                         刷新
@@ -183,6 +192,14 @@ const SystemLogsPage: React.FC = () => {
                         expandable={{
                             expandedRowRender: (record: SystemLogItem) => (
                                 <div style={{ display: 'grid', gap: 12 }}>
+                                    {record.requestId ? (
+                                        <div>
+                                            <Text strong>Request ID</Text>
+                                            <div style={{ marginTop: 8 }}>
+                                                <Text copyable>{record.requestId}</Text>
+                                            </div>
+                                        </div>
+                                    ) : null}
                                     <div>
                                         <Text strong>上下文</Text>
                                         <pre style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>

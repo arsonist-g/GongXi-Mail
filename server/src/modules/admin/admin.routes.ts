@@ -25,6 +25,15 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.post('/', async (request) => {
         const input = createAdminSchema.parse(request.body);
         const admin = await adminService.create(input);
+        request.log.info({
+            systemEvent: true,
+            action: 'admin.create',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            targetAdminId: admin.id,
+            targetUsername: admin.username,
+            role: admin.role,
+        }, 'Created admin account');
         return { success: true, data: admin };
     });
 
@@ -33,6 +42,16 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         const { id } = request.params as { id: string };
         const input = updateAdminSchema.parse(request.body);
         const admin = await adminService.update(parseInt(id), input);
+        request.log.info({
+            systemEvent: true,
+            action: 'admin.update',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            targetAdminId: admin.id,
+            targetUsername: admin.username,
+            role: admin.role,
+            status: admin.status,
+        }, 'Updated admin account');
         return { success: true, data: admin };
     });
 
@@ -40,6 +59,13 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.delete('/:id', async (request) => {
         const { id } = request.params as { id: string };
         await adminService.delete(parseInt(id));
+        request.log.info({
+            systemEvent: true,
+            action: 'admin.delete',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            targetAdminId: parseInt(id),
+        }, 'Deleted admin account');
         return { success: true, data: { message: 'Admin deleted' } };
     });
 };

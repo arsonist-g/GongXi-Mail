@@ -7,6 +7,8 @@ interface SystemLogEntry {
     id: string;
     time: string;
     level: SystemLogLevel;
+    action: string | null;
+    actorUsername: string | null;
     message: string;
     requestId: string | null;
     trigger: string | null;
@@ -82,16 +84,25 @@ function parseSystemLogLine(line: string, index: number): SystemLogEntry | null 
                 ? payload.reqId
                 : null;
 
+        const systemEvent = payload.systemEvent === true;
+        if (!systemEvent) {
+            return null;
+        }
+
         const trigger = typeof payload.trigger === 'string' ? payload.trigger : null;
+        const action = typeof payload.action === 'string' ? payload.action : null;
+        const actorUsername = typeof payload.actorUsername === 'string' ? payload.actorUsername : null;
 
         const context = Object.fromEntries(
-            Object.entries(payload).filter(([key]) => !['level', 'time', 'msg', 'message', 'pid', 'hostname'].includes(key))
+            Object.entries(payload).filter(([key]) => !['level', 'time', 'msg', 'message', 'pid', 'hostname', 'systemEvent'].includes(key))
         );
 
         return {
             id: `${timeValue}-${index}`,
             time: timeValue,
             level: levelMap[numericLevel] || 'info',
+            action,
+            actorUsername,
             message,
             requestId,
             trigger,
@@ -103,6 +114,8 @@ function parseSystemLogLine(line: string, index: number): SystemLogEntry | null 
             id: `raw-${index}`,
             time: new Date().toISOString(),
             level: 'info',
+            action: null,
+            actorUsername: null,
             message: trimmed,
             requestId: null,
             trigger: null,

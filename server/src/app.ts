@@ -28,6 +28,7 @@ export async function buildApp() {
     const fastify = Fastify({
         requestIdHeader: 'x-request-id',
         requestIdLogLabel: 'requestId',
+        disableRequestLogging: true,
         loggerInstance: logger,
     });
 

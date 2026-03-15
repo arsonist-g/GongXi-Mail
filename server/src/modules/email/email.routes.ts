@@ -30,6 +30,14 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.post('/', async (request) => {
         const input = createEmailSchema.parse(request.body);
         const email = await emailService.create(input);
+        request.log.info({
+            systemEvent: true,
+            action: 'email.create',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            emailId: email.id,
+            email: email.email,
+        }, 'Created email account');
         return { success: true, data: email };
     });
 
@@ -38,6 +46,15 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
         const { id } = request.params as { id: string };
         const input = updateEmailSchema.parse(request.body);
         const email = await emailService.update(parseInt(id), input);
+        request.log.info({
+            systemEvent: true,
+            action: 'email.update',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            emailId: email.id,
+            email: email.email,
+            status: email.status,
+        }, 'Updated email account');
         return { success: true, data: email };
     });
 
@@ -45,6 +62,13 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.delete('/:id', async (request) => {
         const { id } = request.params as { id: string };
         await emailService.delete(parseInt(id));
+        request.log.info({
+            systemEvent: true,
+            action: 'email.delete',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            emailId: parseInt(id),
+        }, 'Deleted email account');
         return { success: true, data: { message: 'Email account deleted' } };
     });
 
@@ -52,6 +76,14 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.post('/batch-delete', async (request) => {
         const { ids } = z.object({ ids: z.array(z.number()) }).parse(request.body);
         const result = await emailService.batchDelete(ids);
+        request.log.info({
+            systemEvent: true,
+            action: 'email.batch_delete',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            emailIds: ids,
+            deletedCount: result.deleted,
+        }, 'Batch deleted email accounts');
         return { success: true, data: result };
     });
 
@@ -59,6 +91,16 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.post('/import', async (request) => {
         const input = importEmailSchema.parse(request.body);
         const result = await emailService.import(input);
+        request.log.info({
+            systemEvent: true,
+            action: 'email.import',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            separator: input.separator,
+            success: result.success,
+            failed: result.failed,
+            errorCount: result.errors.length,
+        }, 'Imported email accounts');
         return { success: true, data: result };
     });
 
@@ -72,6 +114,14 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
 
         const idArray = query.ids?.split(',').map(Number).filter((id: number) => Number.isFinite(id) && id > 0);
         const content = await emailService.export(idArray, query.separator, query.groupId);
+        request.log.info({
+            systemEvent: true,
+            action: 'email.export',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            groupId: query.groupId ?? null,
+            emailCount: idArray?.length ?? null,
+        }, 'Exported email accounts');
         return { success: true, data: { content } };
     });
 
@@ -112,6 +162,15 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
         };
 
         const result = await mailService.processMailbox(credentials, { mailbox: mailbox || 'INBOX' });
+        request.log.info({
+            systemEvent: true,
+            action: 'email.clear_mailbox',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            emailId: emailData.id,
+            email: emailData.email,
+            mailbox: mailbox || 'INBOX',
+        }, 'Cleared mailbox');
         return { success: true, data: result };
     });
 
@@ -128,6 +187,8 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
         }
 
         request.log.info({
+            systemEvent: true,
+            action: 'token_refresh.manual_request',
             trigger: 'MANUAL',
             groupId: body?.groupId ?? null,
             requestedById: request.user?.id ?? null,
@@ -145,6 +206,8 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
         }).catch((err) => {
             request.log.error({
                 err,
+                systemEvent: true,
+                action: 'token_refresh.manual_failed',
                 trigger: 'MANUAL',
                 groupId: body?.groupId ?? null,
                 requestedById: request.user?.id ?? null,
@@ -163,6 +226,15 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
 
         const settings = await tokenRefreshService.updateTokenRefreshConfig(input);
         await refreshTokenRefreshJobSchedule();
+        request.log.info({
+            systemEvent: true,
+            action: 'token_refresh.settings_update',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            enabled: settings.enabled,
+            intervalHours: settings.intervalHours,
+            concurrency: settings.concurrency,
+        }, 'Updated token refresh settings');
 
         return { success: true, data: settings };
     });
@@ -173,6 +245,15 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.post('/:id/refresh-token', async (request) => {
         const { id } = request.params as { id: string };
         const result = await tokenRefreshService.refreshSingleToken(parseInt(id));
+        request.log.info({
+            systemEvent: true,
+            action: 'token_refresh.single',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            emailId: result.emailId,
+            email: result.email || null,
+            success: result.success,
+        }, result.success ? 'Refreshed single email token' : 'Single email token refresh failed');
         return { success: true, data: result };
     });
 

@@ -39,6 +39,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }, async (request, _reply) => {
         const input = changePasswordSchema.parse(request.body);
         await authService.changePassword(request.user!.id, input);
+        request.log.info({
+            systemEvent: true,
+            action: 'auth.change_password',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+        }, 'Changed admin password');
         return { success: true, data: { message: 'Password changed' } };
     });
 
@@ -64,6 +70,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }, async (request) => {
         const input = verify2FaSchema.parse(request.body);
         const result = await authService.enableTwoFactor(request.user!.id, input);
+        request.log.info({
+            systemEvent: true,
+            action: 'auth.2fa_enable',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+        }, 'Enabled admin 2FA');
         return { success: true, data: result };
     });
 
@@ -73,6 +85,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }, async (request) => {
         const input = disable2FaSchema.parse(request.body);
         const result = await authService.disableTwoFactor(request.user!.id, input);
+        request.log.info({
+            systemEvent: true,
+            action: 'auth.2fa_disable',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+        }, 'Disabled admin 2FA');
         return { success: true, data: result };
     });
 };

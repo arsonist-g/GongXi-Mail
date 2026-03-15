@@ -23,6 +23,14 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.post('/', async (request) => {
         const input = createGroupSchema.parse(request.body);
         const group = await groupService.create(input);
+        request.log.info({
+            systemEvent: true,
+            action: 'email_group.create',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            groupId: group.id,
+            name: group.name,
+        }, 'Created email group');
         return { success: true, data: group };
     });
 
@@ -31,6 +39,14 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
         const id = parseInt(request.params.id, 10);
         const input = updateGroupSchema.parse(request.body);
         const group = await groupService.update(id, input);
+        request.log.info({
+            systemEvent: true,
+            action: 'email_group.update',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            groupId: group.id,
+            name: group.name,
+        }, 'Updated email group');
         return { success: true, data: group };
     });
 
@@ -38,6 +54,13 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.delete<{ Params: { id: string } }>('/:id', async (request) => {
         const id = parseInt(request.params.id, 10);
         const result = await groupService.delete(id);
+        request.log.info({
+            systemEvent: true,
+            action: 'email_group.delete',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            groupId: id,
+        }, 'Deleted email group');
         return { success: true, data: result };
     });
 
@@ -46,6 +69,15 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
         const id = parseInt(request.params.id, 10);
         const input = assignEmailsSchema.parse(request.body);
         const result = await groupService.assignEmails(id, input.emailIds);
+        request.log.info({
+            systemEvent: true,
+            action: 'email_group.assign',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            groupId: id,
+            emailIds: input.emailIds,
+            updatedCount: result.count,
+        }, 'Assigned emails to group');
         return { success: true, data: result };
     });
 
@@ -54,6 +86,15 @@ const groupRoutes: FastifyPluginAsync = async (fastify) => {
         const id = parseInt(request.params.id, 10);
         const input = assignEmailsSchema.parse(request.body);
         const result = await groupService.removeEmails(id, input.emailIds);
+        request.log.info({
+            systemEvent: true,
+            action: 'email_group.remove',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            groupId: id,
+            emailIds: input.emailIds,
+            updatedCount: result.count,
+        }, 'Removed emails from group');
         return { success: true, data: result };
     });
 };

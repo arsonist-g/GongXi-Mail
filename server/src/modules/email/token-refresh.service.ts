@@ -343,7 +343,7 @@ export const tokenRefreshService = {
         try {
             currentRefreshToken = decrypt(account.refreshToken);
         } catch {
-            logger.error({ emailId, email: account.email }, 'Failed to decrypt refresh token');
+            logger.error({ systemEvent: true, action: 'token_refresh.single_failed', emailId, email: account.email }, 'Failed to decrypt refresh token');
             await prisma.emailAccount.update({
                 where: { id: emailId },
                 data: getFailureUpdateData(account.errorMessage, 'Failed to decrypt refresh token'),
@@ -377,7 +377,7 @@ export const tokenRefreshService = {
                     errorMsg = errorText.substring(0, 200);
                 }
 
-                logger.warn({ email: account.email, status: response.status }, `Token refresh failed: ${errorMsg}`);
+                logger.warn({ systemEvent: true, action: 'token_refresh.single_failed', email: account.email, emailId, status: response.status }, `Token refresh failed: ${errorMsg}`);
                 await prisma.emailAccount.update({
                     where: { id: emailId },
                     data: getFailureUpdateData(account.errorMessage, errorMsg),
@@ -389,7 +389,7 @@ export const tokenRefreshService = {
 
             if (!data.refresh_token) {
                 const msg = 'No refresh_token in response';
-                logger.warn({ email: account.email }, msg);
+                logger.warn({ systemEvent: true, action: 'token_refresh.single_failed', email: account.email, emailId }, msg);
                 await prisma.emailAccount.update({
                     where: { id: emailId },
                     data: getFailureUpdateData(account.errorMessage, msg),
@@ -407,11 +407,11 @@ export const tokenRefreshService = {
                 },
             });
 
-            logger.info({ email: account.email }, 'Token refreshed successfully');
+            logger.info({ systemEvent: true, action: 'token_refresh.single_success', email: account.email, emailId }, 'Token refreshed successfully');
             return { emailId, email: account.email, success: true, message: 'OK' };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Unknown error';
-            logger.error({ err, email: account.email }, 'Token refresh exception');
+            logger.error({ err, systemEvent: true, action: 'token_refresh.single_failed', email: account.email, emailId }, 'Token refresh exception');
             await prisma.emailAccount.update({
                 where: { id: emailId },
                 data: getFailureUpdateData(account.errorMessage, `Exception: ${message}`),
@@ -481,6 +481,8 @@ export const tokenRefreshService = {
             };
 
             logger.info({
+                systemEvent: true,
+                action: trigger === 'AUTO' ? 'token_refresh.auto_started' : 'token_refresh.manual_started',
                 trigger,
                 groupId,
                 requestedById,
@@ -554,6 +556,8 @@ export const tokenRefreshService = {
             }
 
             logger.info({
+                systemEvent: true,
+                action: trigger === 'AUTO' ? 'token_refresh.auto_completed' : 'token_refresh.manual_completed',
                 trigger,
                 groupId,
                 requestedById,
@@ -568,6 +572,8 @@ export const tokenRefreshService = {
         } catch (err) {
             logger.error({
                 err,
+                systemEvent: true,
+                action: trigger === 'AUTO' ? 'token_refresh.auto_failed' : 'token_refresh.manual_failed',
                 trigger,
                 groupId,
                 requestedById,

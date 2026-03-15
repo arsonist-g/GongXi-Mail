@@ -19,6 +19,14 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.post('/', async (request) => {
         const input = createApiKeySchema.parse(request.body);
         const apiKey = await apiKeyService.create(input, request.user!.id);
+        request.log.info({
+            systemEvent: true,
+            action: 'api_key.create',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            apiKeyId: apiKey.id,
+            name: apiKey.name,
+        }, 'Created API key');
         return { success: true, data: apiKey };
     });
 
@@ -43,6 +51,14 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
         const { id } = request.params as { id: string };
         const { group } = request.body as { group?: string };
         await poolService.reset(parseInt(id), group);
+        request.log.info({
+            systemEvent: true,
+            action: 'api_key.reset_pool',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            apiKeyId: parseInt(id),
+            group: group || null,
+        }, 'Reset API key email pool');
         return { success: true, data: { message: '邮箱池已重置' } };
     });
 
@@ -51,6 +67,15 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
         const { id } = request.params as { id: string };
         const input = updateApiKeySchema.parse(request.body);
         const apiKey = await apiKeyService.update(parseInt(id), input);
+        request.log.info({
+            systemEvent: true,
+            action: 'api_key.update',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            apiKeyId: apiKey.id,
+            name: apiKey.name,
+            status: apiKey.status,
+        }, 'Updated API key');
         return { success: true, data: apiKey };
     });
 
@@ -58,6 +83,13 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.delete('/:id', async (request) => {
         const { id } = request.params as { id: string };
         await apiKeyService.delete(parseInt(id));
+        request.log.info({
+            systemEvent: true,
+            action: 'api_key.delete',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            apiKeyId: parseInt(id),
+        }, 'Deleted API key');
         return { success: true, data: { message: 'API Key deleted' } };
     });
 
@@ -77,6 +109,16 @@ const apiKeyRoutes: FastifyPluginAsync = async (fastify) => {
             groupId: z.number().int().positive().optional(),
         }).parse(request.body);
         const result = await poolService.updateEmailUsage(parseInt(id), input.emailIds, input.groupId);
+        request.log.info({
+            systemEvent: true,
+            action: 'api_key.pool_emails_update',
+            actorId: request.user?.id ?? null,
+            actorUsername: request.user?.username ?? null,
+            apiKeyId: parseInt(id),
+            groupId: input.groupId ?? null,
+            emailIds: input.emailIds,
+            count: result.count,
+        }, 'Updated API key pool email usage');
         return { success: true, data: result };
     });
 };

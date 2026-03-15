@@ -75,13 +75,13 @@ async function scheduleFromConfig(reason: 'startup' | 'update' | 'completed' | '
     const state = await tokenRefreshService.getTokenRefreshScheduleState();
 
     if (!state.enabled) {
-        logger.info({ trigger: 'AUTO', reason }, 'Automatic token refresh scheduler is disabled');
+        logger.info({ systemEvent: true, action: 'token_refresh.auto_disabled', trigger: 'AUTO', reason }, 'Automatic token refresh scheduler is disabled');
         await persistAndSchedule(null);
         return;
     }
 
     if (reason === 'update' && tokenRefreshService.isAutoRunInProgress()) {
-        logger.info({ trigger: 'AUTO', reason }, 'Automatic token refresh schedule update deferred until current auto run completes');
+        logger.info({ systemEvent: true, action: 'token_refresh.auto_update_deferred', trigger: 'AUTO', reason }, 'Automatic token refresh schedule update deferred until current auto run completes');
         return;
     }
 
@@ -111,6 +111,8 @@ async function scheduleFromConfig(reason: 'startup' | 'update' | 'completed' | '
     }
 
     logger.info({
+        systemEvent: true,
+        action: 'token_refresh.auto_scheduled',
         trigger: 'AUTO',
         reason,
         intervalHours: state.intervalHours,
@@ -130,7 +132,7 @@ async function executeScheduledRun(): Promise<void> {
     try {
         const state = await tokenRefreshService.getTokenRefreshScheduleState();
         if (!state.enabled) {
-            logger.info({ trigger: 'AUTO' }, 'Skipping automatic token refresh because the scheduler is disabled');
+            logger.info({ systemEvent: true, action: 'token_refresh.auto_skip_disabled', trigger: 'AUTO' }, 'Skipping automatic token refresh because the scheduler is disabled');
             return;
         }
 
@@ -138,6 +140,8 @@ async function executeScheduledRun(): Promise<void> {
             const activeRun = tokenRefreshService.getCurrentRun();
             nextReason = 'retry';
             logger.info({
+                systemEvent: true,
+                action: 'token_refresh.auto_delayed',
                 trigger: 'AUTO',
                 blockedByTrigger: activeRun?.trigger ?? 'UNKNOWN',
                 blockedGroupId: activeRun?.groupId ?? null,
@@ -152,7 +156,7 @@ async function executeScheduledRun(): Promise<void> {
         });
     } catch (err) {
         nextReason = 'retry';
-        logger.error({ err, trigger: 'AUTO' }, 'Automatic token refresh job failed');
+        logger.error({ err, systemEvent: true, action: 'token_refresh.auto_failed', trigger: 'AUTO' }, 'Automatic token refresh job failed');
     } finally {
         if (!stopped) {
             await scheduleFromConfig(nextReason);
