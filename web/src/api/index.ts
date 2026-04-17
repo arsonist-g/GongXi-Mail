@@ -472,8 +472,8 @@ export const emailApi = {
     getById: <T = Record<string, unknown>>(id: number, includeSecrets?: boolean) =>
         requestGet<T>(`/admin/emails/${id}`, { params: { secrets: includeSecrets } }),
 
-    create: (data: { email: string; clientId: string; refreshToken: string; password?: string; groupId?: number }) =>
-        requestPost<Record<string, unknown>, { email: string; clientId: string; refreshToken: string; password?: string; groupId?: number }>(
+    create: (data: { email: string; clientId: string; refreshToken: string; password?: string; groupId?: number; tags?: string[] }) =>
+        requestPost<Record<string, unknown>, { email: string; clientId: string; refreshToken: string; password?: string; groupId?: number; tags?: string[] }>(
             '/admin/emails',
             data,
             {
@@ -495,8 +495,8 @@ export const emailApi = {
             params: { ids: ids?.join(','), separator, groupId },
         }),
 
-    update: (id: number, data: { email?: string; clientId?: string; refreshToken?: string; password?: string; status?: string; groupId?: number | null }) =>
-        requestPut<Record<string, unknown>, { email?: string; clientId?: string; refreshToken?: string; password?: string; status?: string; groupId?: number | null }>(
+    update: (id: number, data: { email?: string; clientId?: string; refreshToken?: string; password?: string; status?: string; groupId?: number | null; tags?: string[] }) =>
+        requestPut<Record<string, unknown>, { email?: string; clientId?: string; refreshToken?: string; password?: string; status?: string; groupId?: number | null; tags?: string[] }>(
             `/admin/emails/${id}`,
             data,
             {

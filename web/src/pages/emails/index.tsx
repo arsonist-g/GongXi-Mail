@@ -71,6 +71,7 @@ interface EmailAccount {
     status: 'ACTIVE' | 'ERROR' | 'DISABLED';
     groupId: number | null;
     group: { id: number; name: string } | null;
+    tags: string[];
     lastCheckAt: string | null;
     tokenRefreshedAt: string | null;
     errorMessage: string | null;
@@ -228,6 +229,7 @@ const EmailsPage: React.FC = () => {
                     refreshToken: details.refreshToken,
                     status: details.status,
                     groupId: details.groupId,
+                    tags: details.tags || [],
                 });
             }
         } catch {
@@ -582,6 +584,21 @@ const EmailsPage: React.FC = () => {
             width: 120,
             render: (group: EmailAccount['group']) =>
                 group ? <Tag color="blue">{group.name}</Tag> : <Tag>未分组</Tag>,
+        },
+        {
+            title: '标签',
+            dataIndex: 'tags',
+            key: 'tags',
+            width: 200,
+            render: (tags: string[]) => (
+                <>
+                    {tags && tags.length > 0 ? (
+                        tags.map((tag) => <Tag key={tag} color="cyan">{tag}</Tag>)
+                    ) : (
+                        <Text type="secondary">-</Text>
+                    )}
+                </>
+            ),
         },
         {
             title: '状态',
@@ -949,6 +966,14 @@ const EmailsPage: React.FC = () => {
                     </Form.Item>
                     <Form.Item name="groupId" label="所属分组">
                         <Select placeholder="可选：选择分组" allowClear options={groupOptions} />
+                    </Form.Item>
+                    <Form.Item name="tags" label="标签">
+                        <Select
+                            mode="tags"
+                            placeholder="输入标签后按回车添加"
+                            style={{ width: '100%' }}
+                            tokenSeparators={[',']}
+                        />
                     </Form.Item>
                     <Form.Item name="status" label="状态" initialValue="ACTIVE">
                         <Select>
