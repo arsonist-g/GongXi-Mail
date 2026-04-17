@@ -21,6 +21,8 @@ const ApiDocsPage: React.FC = () => {
     list_emails: '获取邮箱列表',
     pool_stats: '邮箱池统计',
     pool_reset: '重置邮箱池',
+    filter_by_tags: '标签筛选邮箱',
+    add_tags: '添加标签',
   };
 
   const logActionRows = LOG_ACTION_OPTIONS.map((item) => ({
@@ -273,6 +275,68 @@ curl "${baseUrl}/api/mail_text?email=example@outlook.com&match=\\d{6}" \\
   "error": {
     "code": "AUTH_REQUIRED",
     "message": "API Key required"
+  }
+}`,
+    },
+    {
+      name: '根据标签反向筛选邮箱',
+      method: 'GET',
+      path: '/api/filter-by-tags',
+      description: '返回不包含指定标签的邮箱列表。支持排除多个标签、分页和分组筛选。',
+      params: [
+        { name: 'excludeTags', type: 'string[]', required: true, desc: '要排除的标签（可传多个）' },
+        { name: 'group', type: 'string', required: false, desc: '分组名称（可选）' },
+        { name: 'page', type: 'number', required: false, desc: '页码（默认 1）' },
+        { name: 'pageSize', type: 'number', required: false, desc: '每页数量（默认 50，最大 100）' },
+      ],
+      example: `curl "${baseUrl}/api/filter-by-tags?excludeTags=banned&excludeTags=spam&page=1&pageSize=50" \\
+  -H "X-API-Key: sk_your_api_key"`,
+      successResponse: `{
+  "success": true,
+  "data": {
+    "list": [
+      { "email": "user1@outlook.com", "tags": ["verified"] },
+      { "email": "user2@outlook.com", "tags": [] }
+    ],
+    "total": 85,
+    "page": 1,
+    "pageSize": 50
+  }
+}`,
+      errorResponse: `{
+  "success": false,
+  "error": {
+    "code": "INVALID_PARAMS",
+    "message": "excludeTags is required"
+  }
+}`,
+    },
+    {
+      name: '给邮箱添加标签',
+      method: 'POST',
+      path: '/api/add-tags',
+      description: '为指定邮箱添加一个或多个标签。支持批量添加，自动去重。',
+      params: [
+        { name: 'email', type: 'string', required: true, desc: '邮箱地址' },
+        { name: 'tags', type: 'string[]', required: true, desc: '标签数组（至少 1 个）' },
+      ],
+      example: `curl -X POST "${baseUrl}/api/add-tags" \\
+  -H "X-API-Key: sk_your_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"email": "user@outlook.com", "tags": ["verified", "premium"]}'`,
+      successResponse: `{
+  "success": true,
+  "data": {
+    "email": "user@outlook.com",
+    "tags": ["verified", "premium", "openai"],
+    "message": "Tags added successfully"
+  }
+}`,
+      errorResponse: `{
+  "success": false,
+  "error": {
+    "code": "EMAIL_NOT_FOUND",
+    "message": "Email account not found"
   }
 }`,
     },

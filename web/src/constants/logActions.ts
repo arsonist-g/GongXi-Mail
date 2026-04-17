@@ -7,6 +7,8 @@ export const LOG_ACTIONS = {
     LIST_EMAILS: 'list_emails',
     POOL_STATS: 'pool_stats',
     POOL_RESET: 'pool_reset',
+    FILTER_BY_TAGS: 'filter_by_tags',
+    ADD_TAGS: 'add_tags',
 } as const;
 
 export type LogAction = typeof LOG_ACTIONS[keyof typeof LOG_ACTIONS];
@@ -25,6 +27,8 @@ export const LOG_ACTION_LABELS: Record<LogAction, string> = {
     [LOG_ACTIONS.LIST_EMAILS]: '获取邮箱列表',
     [LOG_ACTIONS.POOL_STATS]: '邮箱池统计',
     [LOG_ACTIONS.POOL_RESET]: '重置邮箱池',
+    [LOG_ACTIONS.FILTER_BY_TAGS]: '标签筛选邮箱',
+    [LOG_ACTIONS.ADD_TAGS]: '添加标签',
 };
 
 export const LOG_ACTION_COLORS: Record<LogAction, string> = {
@@ -36,6 +40,8 @@ export const LOG_ACTION_COLORS: Record<LogAction, string> = {
     [LOG_ACTIONS.LIST_EMAILS]: 'default',
     [LOG_ACTIONS.POOL_STATS]: 'default',
     [LOG_ACTIONS.POOL_RESET]: 'warning',
+    [LOG_ACTIONS.FILTER_BY_TAGS]: 'purple',
+    [LOG_ACTIONS.ADD_TAGS]: 'green',
 };
 
 export const LOG_ACTION_OPTIONS: Array<{ value: LogAction; label: string }> = [
@@ -47,6 +53,8 @@ export const LOG_ACTION_OPTIONS: Array<{ value: LogAction; label: string }> = [
     { value: LOG_ACTIONS.LIST_EMAILS, label: LOG_ACTION_LABELS[LOG_ACTIONS.LIST_EMAILS] },
     { value: LOG_ACTIONS.POOL_STATS, label: LOG_ACTION_LABELS[LOG_ACTIONS.POOL_STATS] },
     { value: LOG_ACTIONS.POOL_RESET, label: LOG_ACTION_LABELS[LOG_ACTIONS.POOL_RESET] },
+    { value: LOG_ACTIONS.FILTER_BY_TAGS, label: LOG_ACTION_LABELS[LOG_ACTIONS.FILTER_BY_TAGS] },
+    { value: LOG_ACTIONS.ADD_TAGS, label: LOG_ACTION_LABELS[LOG_ACTIONS.ADD_TAGS] },
 ];
 
 export function normalizeLogAction(action: string): LogAction | undefined {

@@ -109,6 +109,8 @@ const EmailsPage: React.FC = () => {
     const [keyword, setKeyword] = useState('');
     const [debouncedKeyword, setDebouncedKeyword] = useState('');
     const [filterGroupId, setFilterGroupId] = useState<number | undefined>(undefined);
+    const [excludeTags, setExcludeTags] = useState<string>('');
+    const [debouncedExcludeTags, setDebouncedExcludeTags] = useState<string>('');
     const [importContent, setImportContent] = useState('');
     const [separator, setSeparator] = useState('----');
     const [importGroupId, setImportGroupId] = useState<number | undefined>(undefined);
@@ -156,8 +158,11 @@ const EmailsPage: React.FC = () => {
     const fetchData = useCallback(async () => {
         const currentRequestId = ++latestListRequestIdRef.current;
         setLoading(true);
-        const params: { page: number; pageSize: number; keyword: string; groupId?: number } = { page, pageSize, keyword: debouncedKeyword };
+        const params: { page: number; pageSize: number; keyword: string; groupId?: number; excludeTags?: string[] } = { page, pageSize, keyword: debouncedKeyword };
         if (filterGroupId !== undefined) params.groupId = filterGroupId;
+        if (debouncedExcludeTags.trim()) {
+            params.excludeTags = debouncedExcludeTags.split(',').map(tag => tag.trim()).filter(Boolean);
+        }
 
         const result = await requestData<EmailListResult>(
             () => emailApi.getList(params),
@@ -171,7 +176,7 @@ const EmailsPage: React.FC = () => {
             setTotal(result.total);
         }
         setLoading(false);
-    }, [debouncedKeyword, filterGroupId, page, pageSize]);
+    }, [debouncedKeyword, debouncedExcludeTags, filterGroupId, page, pageSize]);
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -186,6 +191,13 @@ const EmailsPage: React.FC = () => {
         }, 300);
         return () => window.clearTimeout(timer);
     }, [keyword]);
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            setDebouncedExcludeTags(excludeTags.trim());
+        }, 300);
+        return () => window.clearTimeout(timer);
+    }, [excludeTags]);
 
     useEffect(() => {
         const timer = window.setTimeout(() => {
@@ -820,6 +832,16 @@ const EmailsPage: React.FC = () => {
                                                 setFilterGroupId(toOptionalNumber(val));
                                                 setPage(1);
                                             }}
+                                        />
+                                        <Input
+                                            placeholder="排除标签（逗号分隔）"
+                                            value={excludeTags}
+                                            onChange={(e) => {
+                                                setExcludeTags(e.target.value);
+                                                setPage(1);
+                                            }}
+                                            style={{ width: 200 }}
+                                            allowClear
                                         />
                                     </Space>
                                     <Space wrap>
