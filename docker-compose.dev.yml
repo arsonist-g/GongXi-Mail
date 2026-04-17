@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  app:
+  gongxi-mail-app:
     build:
       context: .
       dockerfile: Dockerfile
@@ -10,17 +10,17 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=postgresql://oauth2api:oauth2api_secret@postgres:5432/oauth2api
-      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://oauth2api:oauth2api_secret@gongxi-mail-postgres:5432/oauth2api
+      - REDIS_URL=redis://gongxi-mail-redis:6379
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=2h
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
     depends_on:
-      postgres:
+      gongxi-mail-postgres:
         condition: service_healthy
-      redis:
+      gongxi-mail-redis:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -34,7 +34,7 @@ services:
       retries: 3
       start_period: 60s
 
-  redis:
+  gongxi-mail-redis:
     image: redis:7-alpine
     restart: unless-stopped
     networks:
@@ -45,10 +45,10 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - redis_data:/data
-    command: gongximail_redis-server --appendonly yes
+      - gongximail_redis_data:/data
+    command: redis-server --appendonly yes
 
-  postgres:
+  gongxi-mail-postgres:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=oauth2api
