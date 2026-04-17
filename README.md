@@ -109,7 +109,27 @@ npm run test
 | `GRAPH_ONLY` | 仅 Graph，不回退 |
 | `IMAP_ONLY` | 仅 IMAP，不回退 |
 
-说明：`IMAP_ONLY` 不支持“清空邮箱（process-mailbox）”，该操作依赖 Graph API。
+说明：`IMAP_ONLY` 不支持”清空邮箱（process-mailbox）”，该操作依赖 Graph API。
+
+## 邮箱标签系统
+
+系统支持为邮箱添加自定义标签，用于分类和筛选：
+
+### 管理后台功能
+- **标签管理**：在邮箱编辑界面添加/删除标签
+- **标签筛选**：支持反向筛选（排除指定标签的邮箱）
+- **批量操作**：可通过 API 批量添加标签
+
+### 使用场景
+- 标记已验证的邮箱：`verified`
+- 标记特定用途：`openai`, `discord`, `aws`
+- 标记问题邮箱：`banned`, `spam`, `error`
+- 自定义分类：支持任意标签名称
+
+### 前端筛选示例
+在管理后台邮箱列表页面，使用”排除标签”输入框可以过滤掉包含特定标签的邮箱，例如：
+- 排除 `openai` 标签：只显示未用于 OpenAI 的邮箱
+- 排除 `banned,spam`：过滤掉被标记为问题的邮箱
 
 ## API 文档
 
@@ -129,6 +149,8 @@ npm run test
 | `/api/list-emails` | 获取系统所有可用邮箱 | - |
 | `/api/pool-stats` | 邮箱池统计 | - |
 | `/api/reset-pool` | 重置分配记录 | 释放当前 Key 占用的所有邮箱标记 |
+| `/api/filter-by-tags` | 根据标签反向筛选邮箱 | 返回不包含指定标签的邮箱 |
+| `/api/add-tags` | 给邮箱添加标签 | 支持批量添加，自动去重 |
 
 #### 使用流程
 
@@ -151,6 +173,19 @@ npm run test
      -d '{"email": "xxx@outlook.com"}'
    ```
 
+4. **标签管理**：
+   添加标签：
+   ```bash
+   curl -X POST "/api/add-tags" -H "X-API-Key: sk_xxx" \
+     -d '{"email": "xxx@outlook.com", "tags": ["verified", "premium"]}'
+   ```
+   
+   筛选邮箱（排除特定标签）：
+   ```bash
+   curl "/api/filter-by-tags?excludeTags=banned&excludeTags=spam&page=1&pageSize=50" \
+     -H "X-API-Key: sk_xxx"
+   ```
+
 #### 参数说明
 
 **通用参数**：
@@ -166,6 +201,20 @@ npm run test
 |------|------|
 | match | 正则表达式，用于提取特定内容 (例如 `\d{6}`) |
 
+**`/api/filter-by-tags` 参数**：
+| 参数 | 说明 |
+|------|------|
+| excludeTags | 要排除的标签（字符串或数组） |
+| group | 分组名称（可选） |
+| page | 页码（默认 1） |
+| pageSize | 每页数量（默认 50，最大 100） |
+
+**`/api/add-tags` 参数**：
+| 参数 | 说明 |
+|------|------|
+| email | 邮箱地址（必填） |
+| tags | 标签数组（必填，至少 1 个） |
+
 ## 操作日志 Action 命名
 
 `/admin/dashboard/logs` 中 `action` 字段使用以下固定值：
@@ -180,6 +229,8 @@ npm run test
 | `list_emails` | 获取邮箱列表 |
 | `pool_stats` | 邮箱池统计 |
 | `pool_reset` | 重置邮箱池 |
+| `filter_by_tags` | 标签筛选邮箱 |
+| `add_tags` | 添加标签 |
 
 ## API Key 权限键
 

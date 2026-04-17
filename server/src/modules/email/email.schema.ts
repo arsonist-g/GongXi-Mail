@@ -6,6 +6,7 @@ export const createEmailSchema = z.object({
     refreshToken: z.string().min(1),
     password: z.string().optional(),
     groupId: z.coerce.number().int().positive().optional(),
+    tags: z.array(z.string()).optional(),
 });
 
 export const updateEmailSchema = z.object({
@@ -15,6 +16,7 @@ export const updateEmailSchema = z.object({
     password: z.string().optional(),
     status: z.enum(['ACTIVE', 'ERROR', 'DISABLED']).optional(),
     groupId: z.union([z.coerce.number().int().positive(), z.null()]).optional(),
+    tags: z.array(z.string()).optional(),
 });
 
 export const listEmailSchema = z.object({
@@ -24,6 +26,22 @@ export const listEmailSchema = z.object({
     keyword: z.string().optional(),
     groupId: z.coerce.number().int().positive().optional(),
     groupName: z.string().optional(),
+    excludeTags: z.preprocess(
+        (val) => {
+            if (!val) return undefined;
+            if (Array.isArray(val)) return val;
+            if (typeof val === 'string') return [val];
+            // 处理 Fastify 将 excludeTags[] 解析为对象的情况
+            if (typeof val === 'object' && val !== null) {
+                const values = Object.values(val);
+                if (values.length > 0 && values.every(v => typeof v === 'string')) {
+                    return values;
+                }
+            }
+            return undefined;
+        },
+        z.array(z.string()).optional()
+    ),
 });
 
 export const importEmailSchema = z.object({

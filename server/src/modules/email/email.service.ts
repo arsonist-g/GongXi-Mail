@@ -9,7 +9,7 @@ export const emailService = {
      * 获取邮箱列表
      */
     async list(input: ListEmailInput) {
-        const { page, pageSize, status, keyword, groupId, groupName } = input;
+        const { page, pageSize, status, keyword, groupId, groupName, excludeTags } = input;
         const skip = (page - 1) * pageSize;
 
         const where: Prisma.EmailAccountWhereInput = {};
@@ -22,6 +22,13 @@ export const emailService = {
         } else if (groupName) {
             where.group = { name: groupName };
         }
+        if (excludeTags && excludeTags.length > 0) {
+            where.NOT = {
+                tags: {
+                    hasSome: excludeTags,
+                },
+            };
+        }
 
         const [list, total] = await Promise.all([
             prisma.emailAccount.findMany({
@@ -33,6 +40,7 @@ export const emailService = {
                 status: true,
                 groupId: true,
                 group: { select: { id: true, name: true, fetchStrategy: true } },
+                tags: true,
                 lastCheckAt: true,
                 tokenRefreshedAt: true,
                 errorMessage: true,
@@ -63,6 +71,7 @@ export const emailService = {
                 status: true,
                 groupId: true,
                 group: { select: { id: true, name: true, fetchStrategy: true } },
+                tags: true,
                 lastCheckAt: true,
                 tokenRefreshedAt: true,
                 errorMessage: true,

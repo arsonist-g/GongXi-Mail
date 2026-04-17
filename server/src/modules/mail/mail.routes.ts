@@ -5,6 +5,8 @@ import { emailService } from '../email/email.service.js';
 import { MAIL_LOG_ACTIONS } from './mail.actions.js';
 import { z } from 'zod';
 import { AppError } from '../../plugins/error.js';
+import prisma from '../../lib/prisma.js';
+import type { Prisma } from '@prisma/client';
 
 // 邮件请求 Schema
 const mailRequestSchema = z.object({
@@ -564,6 +566,192 @@ const mailRoutes: FastifyPluginAsync = async (fastify) => {
         } catch (err: unknown) {
             await mailService.logApiCall(
                 MAIL_LOG_ACTIONS.POOL_RESET,
+                request.apiKey?.id,
+                undefined,
+                request.ip,
+                getErrorStatusCode(err),
+                Date.now() - startTime,
+                request.id
+            );
+            throw err;
+        }
+    });
+
+    // ========================================
+    // 新增：根据标签反向筛选邮箱（不包含指定标签的邮箱）
+    // ========================================
+    fastify.all('/filter-by-tags', async (request) => {
+        const startTime = Date.now();
+        try {
+            if (!request.apiKey?.id) {
+                throw new AppError('AUTH_REQUIRED', 'API Key required', 401);
+            }
+
+            const schema = z.object({
+                excludeTags: z.union([z.string(), z.array(z.string())]).transform(val =>
+                    Array.isArray(val) ? val : [val]
+                ),
+                group: z.string().optional(),
+                page: z.coerce.number().min(1).default(1),
+                pageSize: z.coerce.number().min(1).max(100).default(50),
+            });
+
+            const params = (request.method === 'GET' ? request.query : request.body) as Record<string, unknown>;
+            const { excludeTags: tagsArray, group: groupName, page, pageSize } = schema.parse(params);
+
+            // 获取 API Key 的权限范围
+            const scope = await poolService.getApiKeyScope(request.apiKey.id);
+
+            // 解析 groupId（如果提供了 groupName）
+            let groupId: number | undefined;
+            if (groupName) {
+                const group = await prisma.emailGroup.findUnique({ where: { name: groupName } });
+                if (!group) {
+                    throw new AppError('GROUP_NOT_FOUND', `Email group '${groupName}' not found`, 404);
+                }
+                groupId = group.id;
+            }
+
+            // 构建查询条件（考虑 API Key 权限）
+            const where: Prisma.EmailAccountWhereInput = {
+                status: 'ACTIVE',
+                NOT: {
+                    tags: {
+                        hasSome: tagsArray,
+                    },
+                },
+            };
+
+            // 应用分组过滤
+            if (groupId !== undefined) {
+                if (scope.allowedGroupIds && !scope.allowedGroupIds.includes(groupId)) {
+                    throw new AppError('GROUP_FORBIDDEN', 'This API Key cannot access the selected group', 403);
+                }
+                where.groupId = groupId;
+            } else if (scope.allowedGroupIds) {
+                where.groupId = { in: scope.allowedGroupIds };
+            }
+
+            // 应用邮箱 ID 过滤
+            if (scope.allowedEmailIds) {
+                where.id = { in: scope.allowedEmailIds };
+            }
+
+            // 查询邮箱
+            const [list, total] = await Promise.all([
+                prisma.emailAccount.findMany({
+                    where,
+                    select: {
+                        id: true,
+                        email: true,
+                        tags: true,
+                        groupId: true,
+                        group: { select: { name: true } },
+                    },
+                    skip: (page - 1) * pageSize,
+                    take: pageSize,
+                    orderBy: { id: 'asc' },
+                }),
+                prisma.emailAccount.count({ where }),
+            ]);
+
+            await mailService.logApiCall(
+                'filter_by_tags',
+                request.apiKey.id,
+                undefined,
+                request.ip,
+                200,
+                Date.now() - startTime,
+                request.id
+            );
+
+            return {
+                success: true,
+                data: {
+                    emails: list.map(e => ({
+                        id: e.id,
+                        email: e.email,
+                        tags: e.tags,
+                        groupId: e.groupId,
+                        group: e.group?.name,
+                    })),
+                    total,
+                    page,
+                    pageSize,
+                    excludedTags: tagsArray,
+                },
+            };
+        } catch (err: unknown) {
+            await mailService.logApiCall(
+                'filter_by_tags',
+                request.apiKey?.id,
+                undefined,
+                request.ip,
+                getErrorStatusCode(err),
+                Date.now() - startTime,
+                request.id
+            );
+            throw err;
+        }
+    });
+
+    // ========================================
+    // 新增：给邮箱添加标签
+    // ========================================
+    fastify.post('/add-tags', async (request) => {
+        const startTime = Date.now();
+        try {
+            if (!request.apiKey?.id) {
+                throw new AppError('AUTH_REQUIRED', 'API Key required', 401);
+            }
+
+            const schema = z.object({
+                email: z.string().email(),
+                tags: z.array(z.string()).min(1),
+            });
+
+            const { email, tags } = schema.parse(request.body);
+
+            // 获取邮箱信息
+            const emailAccount = await emailService.getByEmail(email);
+            if (!emailAccount) {
+                throw new AppError('EMAIL_NOT_FOUND', 'Email account not found', 404);
+            }
+
+            // 检查 API Key 是否有权限访问该邮箱
+            await poolService.assertEmailAccessible(request.apiKey.id, emailAccount.id, emailAccount.groupId);
+
+            // 获取当前标签
+            const currentEmail = await emailService.getById(emailAccount.id);
+            const currentTags = currentEmail.tags || [];
+
+            // 合并标签（去重）
+            const newTags = Array.from(new Set([...currentTags, ...tags]));
+
+            // 更新邮箱标签
+            await emailService.update(emailAccount.id, { tags: newTags });
+
+            await mailService.logApiCall(
+                'add_tags',
+                request.apiKey.id,
+                emailAccount.id,
+                request.ip,
+                200,
+                Date.now() - startTime,
+                request.id
+            );
+
+            return {
+                success: true,
+                data: {
+                    email: email,
+                    tags: newTags,
+                    addedTags: tags,
+                },
+            };
+        } catch (err: unknown) {
+            await mailService.logApiCall(
+                'add_tags',
                 request.apiKey?.id,
                 undefined,
                 request.ip,
