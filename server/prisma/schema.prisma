@@ -84,6 +84,7 @@ model EmailAccount {
   refreshToken String      @map("refresh_token") @db.Text
   status       EmailStatus @default(ACTIVE)
   groupId      Int?        @map("group_id")
+  tags         String[]    @default([])
   lastCheckAt  DateTime?   @map("last_check_at")
   tokenRefreshedAt DateTime? @map("token_refreshed_at")
   errorMessage String?     @map("error_message") @db.Text

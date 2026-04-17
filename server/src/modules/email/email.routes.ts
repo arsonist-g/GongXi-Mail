@@ -14,12 +14,13 @@ const emailRoutes: FastifyPluginAsync = async (fastify) => {
     // 列表
     fastify.get('/', async (request) => {
         // 处理 excludeTags[] 格式的查询参数
-        const query = { ...request.query } as Record<string, unknown>;
-        if (query['excludeTags[]']) {
-            query.excludeTags = query['excludeTags[]'];
-            delete query['excludeTags[]'];
+        const query = request.query as Record<string, unknown>;
+        const processedQuery = { ...query };
+        if (processedQuery['excludeTags[]']) {
+            processedQuery.excludeTags = processedQuery['excludeTags[]'];
+            delete processedQuery['excludeTags[]'];
         }
-        const input = listEmailSchema.parse(query);
+        const input = listEmailSchema.parse(processedQuery);
         const result = await emailService.list(input);
         return { success: true, data: result };
     });
