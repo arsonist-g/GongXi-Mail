@@ -13,15 +13,12 @@ const ApiDocsPage: React.FC = () => {
   ];
 
   const logActionDescriptions: Record<string, string> = {
-    get_email: '分配邮箱',
+    get_email: '获取邮箱',
     mail_new: '获取最新邮件',
     mail_text: '获取邮件文本',
     mail_all: '获取所有邮件',
     process_mailbox: '清空邮箱',
     list_emails: '获取邮箱列表',
-    pool_stats: '邮箱池统计',
-    pool_reset: '重置邮箱池',
-    filter_by_tags: '标签筛选邮箱',
     add_tags: '添加标签',
     import_emails: '批量导入邮箱',
   };
@@ -55,24 +52,45 @@ const ApiDocsPage: React.FC = () => {
       name: '获取邮箱地址',
       method: 'GET/POST',
       path: '/api/get-email',
-      description: '从邮箱池中分配一个未使用的邮箱地址。可通过 group 参数限制仅从指定分组中分配。',
+      description: '根据标签筛选获取邮箱地址。可通过 excludeTags 参数排除特定标签的邮箱，通过 group 参数限制仅从指定分组中获取。',
       params: [
-        { name: 'group', type: 'string', required: false, desc: '分组名称，仅从该分组中分配' },
+        { name: 'excludeTags', type: 'string[]', required: false, desc: '要排除的标签（可传多个）' },
+        { name: 'group', type: 'string', required: false, desc: '分组名称，仅从该分组中获取' },
+        { name: 'page', type: 'number', required: false, desc: '页码（默认 1）' },
+        { name: 'pageSize', type: 'number', required: false, desc: '每页数量（默认 1，最大 100）' },
       ],
-      example: `curl -X POST "${baseUrl}/api/get-email" \\
-  -H "X-API-Key: sk_your_api_key"`,
+      example: `# 获取一个邮箱（不排除任何标签）
+curl -X POST "${baseUrl}/api/get-email" \\
+  -H "X-API-Key: sk_your_api_key"
+
+# 排除带有 banned 和 spam 标签的邮箱
+curl -X POST "${baseUrl}/api/get-email" \\
+  -H "X-API-Key: sk_your_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{"excludeTags": ["banned", "spam"]}'`,
       successResponse: `{
   "success": true,
   "data": {
-    "email": "example@outlook.com",
-    "id": 1
+    "emails": [
+      {
+        "id": 1,
+        "email": "example@outlook.com",
+        "tags": ["verified"],
+        "groupId": null,
+        "group": null
+      }
+    ],
+    "total": 85,
+    "page": 1,
+    "pageSize": 1,
+    "excludedTags": ["banned", "spam"]
   }
 }`,
       errorResponse: `{
   "success": false,
   "error": {
-    "code": "NO_UNUSED_EMAIL",
-    "message": "No unused emails available."
+    "code": "GROUP_NOT_FOUND",
+    "message": "Email group 'premium' not found"
   }
 }`,
     },
@@ -230,89 +248,6 @@ curl "${baseUrl}/api/mail_text?email=example@outlook.com&match=\\d{6}" \\
 }`,
     },
     {
-      name: '邮箱池统计',
-      method: 'GET/POST',
-      path: '/api/pool-stats',
-      description: '获取当前 API Key 的分配使用情况。支持按分组筛选。',
-      params: [
-        { name: 'group', type: 'string', required: false, desc: '分组名称，仅统计该分组' },
-      ],
-      example: `curl "${baseUrl}/api/pool-stats" \\
-  -H "X-API-Key: sk_your_api_key"`,
-      successResponse: `{
-  "success": true,
-  "data": {
-    "total": 100,
-    "used": 3,
-    "remaining": 97
-  }
-}`,
-      errorResponse: `{
-  "success": false,
-  "error": {
-    "code": "AUTH_REQUIRED",
-    "message": "API Key required"
-  }
-}`,
-    },
-    {
-      name: '重置分配记录',
-      method: 'GET/POST',
-      path: '/api/reset-pool',
-      description: '重置当前 API Key 的分配记录。支持按分组重置。',
-      params: [
-        { name: 'group', type: 'string', required: false, desc: '分组名称，仅重置该分组' },
-      ],
-      example: `curl -X POST "${baseUrl}/api/reset-pool" \\
-  -H "X-API-Key: sk_your_api_key"`,
-      successResponse: `{
-  "success": true,
-  "data": {
-    "message": "Pool reset successfully"
-  }
-}`,
-      errorResponse: `{
-  "success": false,
-  "error": {
-    "code": "AUTH_REQUIRED",
-    "message": "API Key required"
-  }
-}`,
-    },
-    {
-      name: '根据标签反向筛选邮箱',
-      method: 'GET',
-      path: '/api/filter-by-tags',
-      description: '返回不包含指定标签的邮箱列表。支持排除多个标签、分页和分组筛选。',
-      params: [
-        { name: 'excludeTags', type: 'string[]', required: true, desc: '要排除的标签（可传多个）' },
-        { name: 'group', type: 'string', required: false, desc: '分组名称（可选）' },
-        { name: 'page', type: 'number', required: false, desc: '页码（默认 1）' },
-        { name: 'pageSize', type: 'number', required: false, desc: '每页数量（默认 50，最大 100）' },
-      ],
-      example: `curl "${baseUrl}/api/filter-by-tags?excludeTags=banned&excludeTags=spam&page=1&pageSize=50" \\
-  -H "X-API-Key: sk_your_api_key"`,
-      successResponse: `{
-  "success": true,
-  "data": {
-    "list": [
-      { "email": "user1@outlook.com", "tags": ["verified"] },
-      { "email": "user2@outlook.com", "tags": [] }
-    ],
-    "total": 85,
-    "page": 1,
-    "pageSize": 50
-  }
-}`,
-      errorResponse: `{
-  "success": false,
-  "error": {
-    "code": "INVALID_PARAMS",
-    "message": "excludeTags is required"
-  }
-}`,
-    },
-    {
       name: '给邮箱添加标签',
       method: 'POST',
       path: '/api/add-tags',
@@ -398,7 +333,7 @@ curl "${baseUrl}/api/mail_text?email=example@outlook.com&match=\\d{6}" \\
             <p style={{ marginBottom: 8 }}>系统提供灵活的邮箱访问方式：</p>
             <ul style={{ marginBottom: 8, paddingLeft: 20 }}>
               <li><strong>直接访问</strong>：如果您已知目标邮箱地址，可直接调用 <code>/api/mail_new</code> 或 <code>/api/mail_all</code> 获取邮件，无需任何前置分配操作。</li>
-              <li><strong>自动分配</strong>：如果你需要一个新的、未使用的邮箱，请调用 <code>/api/get-email</code>。这将返回一个随机邮箱并标记为您已使用，避免重复。</li>
+              <li><strong>标签筛选</strong>：调用 <code>/api/get-email</code> 可根据标签筛选邮箱，支持排除特定标签的邮箱，默认返回 1 个邮箱。</li>
               <li><strong>文本提速</strong>：对于自动化脚本，推荐使用 <code>/api/mail_text</code> 配合正则匹配，直接获取验证码等核心信息。</li>
             </ul>
           </div>

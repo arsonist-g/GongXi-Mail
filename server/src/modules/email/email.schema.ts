@@ -21,7 +21,7 @@ export const updateEmailSchema = z.object({
 
 export const listEmailSchema = z.object({
     page: z.coerce.number().min(1).default(1),
-    pageSize: z.coerce.number().min(1).max(100).default(10),
+    pageSize: z.coerce.number().min(1).max(100).default(1),
     status: z.enum(['ACTIVE', 'ERROR', 'DISABLED']).optional(),
     keyword: z.string().optional(),
     groupId: z.coerce.number().int().positive().optional(),

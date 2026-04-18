@@ -70,30 +70,11 @@ export const mailService = {
         input: MailRequestInput,
         apiKeyId?: number
     ): Promise<Credentials> {
-        const { email, auto } = input;
-
-        // 自动分配模式
-        if (!email && auto) {
-            if (!apiKeyId) {
-                throw new AppError('AUTH_REQUIRED', 'Auto assignment requires API Key authentication', 400);
-            }
-
-            const account = await poolService.getUnusedEmail(apiKeyId);
-            if (!account) {
-                const stats = await poolService.getStats(apiKeyId);
-                throw new AppError(
-                    'NO_UNUSED_EMAIL',
-                    `No unused emails available. Used: ${stats.used}/${stats.total}`,
-                    400
-                );
-            }
-
-            return { ...account, autoAssigned: true };
-        }
+        const { email } = input;
 
         // 必须提供邮箱
         if (!email) {
-            throw new AppError('EMAIL_REQUIRED', 'Email is required. Set auto=true to auto-assign.', 400);
+            throw new AppError('EMAIL_REQUIRED', 'Email is required', 400);
         }
 
         // 从数据库查询

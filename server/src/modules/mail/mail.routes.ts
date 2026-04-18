@@ -60,7 +60,7 @@ const mailRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.addHook('preHandler', fastify.authenticateApiKey);
 
     // ========================================
-    // 新增：获取一个未使用的邮箱地址 (带重试机制)
+    // 获取邮箱地址（基于标签筛选）
     // ========================================
     fastify.all('/get-email', async (request) => {
         const startTime = Date.now();
@@ -70,47 +70,104 @@ const mailRoutes: FastifyPluginAsync = async (fastify) => {
             }
             fastify.assertApiPermission(request, MAIL_LOG_ACTIONS.GET_EMAIL);
 
-            const groupName = getGroupNameFromRequest(request.method, request.query, request.body);
+            const schema = z.object({
+                excludeTags: z.union([z.string(), z.array(z.string())]).optional().transform(val =>
+                    val ? (Array.isArray(val) ? val : [val]) : undefined
+                ),
+                group: z.string().optional(),
+                page: z.coerce.number().min(1).default(1),
+                pageSize: z.coerce.number().min(1).max(100).default(1),
+            });
 
-            // 重试 3 次，防止并发冲突
-            for (let i = 0; i < 3; i++) {
-                const email = await poolService.getUnusedEmail(request.apiKey.id, groupName);
-                if (!email) {
-                    const stats = await poolService.getStats(request.apiKey.id, groupName);
-                    throw new AppError(
-                        'NO_UNUSED_EMAIL',
-                        `No unused emails available${groupName ? ` in group '${groupName}'` : ''}. Used: ${stats.used}/${stats.total}`,
-                        400
-                    );
-                }
+            const params = (request.method === 'GET' ? request.query : request.body) as Record<string, unknown>;
+            const { excludeTags: tagsArray, group: groupName, page, pageSize } = schema.parse(params);
 
-                try {
-                    await poolService.markUsed(request.apiKey.id, email.id);
-                    await mailService.logApiCall(
-                        MAIL_LOG_ACTIONS.GET_EMAIL,
-                        request.apiKey.id,
-                        email.id,
-                        request.ip,
-                        200,
-                        Date.now() - startTime,
-                        request.id
-                    );
-                    return {
-                        success: true,
-                        data: {
-                            email: email.email,
-                            id: email.id,
-                        },
-                    };
-                } catch (err: unknown) {
-                    if (hasErrorCode(err, 'ALREADY_USED')) {
-                        continue;
-                    }
-                    throw err;
+            // 获取 API Key 的权限范围
+            const scope = await poolService.getApiKeyScope(request.apiKey.id);
+
+            // 解析 groupId（如果提供了 groupName）
+            let groupId: number | undefined;
+            if (groupName) {
+                const group = await prisma.emailGroup.findUnique({ where: { name: groupName } });
+                if (!group) {
+                    throw new AppError('GROUP_NOT_FOUND', `Email group '${groupName}' not found`, 404);
                 }
+                groupId = group.id;
             }
 
-            throw new AppError('CONCURRENCY_LIMIT', 'System busy, please try again', 429);
+            // 构建查询条件（考虑 API Key 权限）
+            const where: Prisma.EmailAccountWhereInput = {
+                status: 'ACTIVE',
+            };
+
+            // 如果指定了 excludeTags，添加排除条件
+            if (tagsArray && tagsArray.length > 0) {
+                where.NOT = {
+                    tags: {
+                        hasSome: tagsArray,
+                    },
+                };
+            }
+
+            // 应用分组过滤
+            if (groupId !== undefined) {
+                if (scope.allowedGroupIds && !scope.allowedGroupIds.includes(groupId)) {
+                    throw new AppError('GROUP_FORBIDDEN', 'This API Key cannot access the selected group', 403);
+                }
+                where.groupId = groupId;
+            } else if (scope.allowedGroupIds) {
+                where.groupId = { in: scope.allowedGroupIds };
+            }
+
+            // 应用邮箱 ID 过滤
+            if (scope.allowedEmailIds) {
+                where.id = { in: scope.allowedEmailIds };
+            }
+
+            // 查询邮箱
+            const [list, total] = await Promise.all([
+                prisma.emailAccount.findMany({
+                    where,
+                    select: {
+                        id: true,
+                        email: true,
+                        tags: true,
+                        groupId: true,
+                        group: { select: { name: true } },
+                    },
+                    skip: (page - 1) * pageSize,
+                    take: pageSize,
+                    orderBy: { id: 'asc' },
+                }),
+                prisma.emailAccount.count({ where }),
+            ]);
+
+            await mailService.logApiCall(
+                MAIL_LOG_ACTIONS.GET_EMAIL,
+                request.apiKey.id,
+                undefined,
+                request.ip,
+                200,
+                Date.now() - startTime,
+                request.id
+            );
+
+            return {
+                success: true,
+                data: {
+                    emails: list.map(e => ({
+                        id: e.id,
+                        email: e.email,
+                        tags: e.tags,
+                        groupId: e.groupId,
+                        group: e.group?.name,
+                    })),
+                    total,
+                    page,
+                    pageSize,
+                    excludedTags: tagsArray || [],
+                },
+            };
         } catch (err: unknown) {
             await mailService.logApiCall(
                 MAIL_LOG_ACTIONS.GET_EMAIL,
@@ -490,200 +547,6 @@ const mailRoutes: FastifyPluginAsync = async (fastify) => {
         } catch (err: unknown) {
             await mailService.logApiCall(
                 MAIL_LOG_ACTIONS.LIST_EMAILS,
-                request.apiKey?.id,
-                undefined,
-                request.ip,
-                getErrorStatusCode(err),
-                Date.now() - startTime,
-                request.id
-            );
-            throw err;
-        }
-    });
-
-    // ========================================
-    // 邮箱池统计（支持分组过滤）
-    // ========================================
-    fastify.all('/pool-stats', async (request) => {
-        const startTime = Date.now();
-        try {
-            if (!request.apiKey?.id) {
-                throw new AppError('AUTH_REQUIRED', 'API Key required', 401);
-            }
-            fastify.assertApiPermission(request, MAIL_LOG_ACTIONS.POOL_STATS);
-            const groupName = getGroupNameFromRequest(request.method, request.query, request.body);
-            const stats = await poolService.getStats(request.apiKey.id, groupName);
-
-            await mailService.logApiCall(
-                MAIL_LOG_ACTIONS.POOL_STATS,
-                request.apiKey.id,
-                undefined,
-                request.ip,
-                200,
-                Date.now() - startTime,
-                request.id
-            );
-
-            return { success: true, data: stats };
-        } catch (err: unknown) {
-            await mailService.logApiCall(
-                MAIL_LOG_ACTIONS.POOL_STATS,
-                request.apiKey?.id,
-                undefined,
-                request.ip,
-                getErrorStatusCode(err),
-                Date.now() - startTime,
-                request.id
-            );
-            throw err;
-        }
-    });
-
-    // ========================================
-    // 重置邮箱池（支持分组过滤）
-    // ========================================
-    fastify.all('/reset-pool', async (request) => {
-        const startTime = Date.now();
-        try {
-            if (!request.apiKey?.id) {
-                throw new AppError('AUTH_REQUIRED', 'API Key required', 401);
-            }
-            fastify.assertApiPermission(request, MAIL_LOG_ACTIONS.POOL_RESET);
-            const groupName = getGroupNameFromRequest(request.method, request.query, request.body);
-            await poolService.reset(request.apiKey.id, groupName);
-
-            await mailService.logApiCall(
-                MAIL_LOG_ACTIONS.POOL_RESET,
-                request.apiKey.id,
-                undefined,
-                request.ip,
-                200,
-                Date.now() - startTime,
-                request.id
-            );
-
-            return { success: true, data: { message: `Pool reset successfully${groupName ? ` for group '${groupName}'` : ''}` } };
-        } catch (err: unknown) {
-            await mailService.logApiCall(
-                MAIL_LOG_ACTIONS.POOL_RESET,
-                request.apiKey?.id,
-                undefined,
-                request.ip,
-                getErrorStatusCode(err),
-                Date.now() - startTime,
-                request.id
-            );
-            throw err;
-        }
-    });
-
-    // ========================================
-    // 新增：根据标签反向筛选邮箱（不包含指定标签的邮箱）
-    // ========================================
-    fastify.all('/filter-by-tags', async (request) => {
-        const startTime = Date.now();
-        try {
-            if (!request.apiKey?.id) {
-                throw new AppError('AUTH_REQUIRED', 'API Key required', 401);
-            }
-
-            const schema = z.object({
-                excludeTags: z.union([z.string(), z.array(z.string())]).transform(val =>
-                    Array.isArray(val) ? val : [val]
-                ),
-                group: z.string().optional(),
-                page: z.coerce.number().min(1).default(1),
-                pageSize: z.coerce.number().min(1).max(100).default(50),
-            });
-
-            const params = (request.method === 'GET' ? request.query : request.body) as Record<string, unknown>;
-            const { excludeTags: tagsArray, group: groupName, page, pageSize } = schema.parse(params);
-
-            // 获取 API Key 的权限范围
-            const scope = await poolService.getApiKeyScope(request.apiKey.id);
-
-            // 解析 groupId（如果提供了 groupName）
-            let groupId: number | undefined;
-            if (groupName) {
-                const group = await prisma.emailGroup.findUnique({ where: { name: groupName } });
-                if (!group) {
-                    throw new AppError('GROUP_NOT_FOUND', `Email group '${groupName}' not found`, 404);
-                }
-                groupId = group.id;
-            }
-
-            // 构建查询条件（考虑 API Key 权限）
-            const where: Prisma.EmailAccountWhereInput = {
-                status: 'ACTIVE',
-                NOT: {
-                    tags: {
-                        hasSome: tagsArray,
-                    },
-                },
-            };
-
-            // 应用分组过滤
-            if (groupId !== undefined) {
-                if (scope.allowedGroupIds && !scope.allowedGroupIds.includes(groupId)) {
-                    throw new AppError('GROUP_FORBIDDEN', 'This API Key cannot access the selected group', 403);
-                }
-                where.groupId = groupId;
-            } else if (scope.allowedGroupIds) {
-                where.groupId = { in: scope.allowedGroupIds };
-            }
-
-            // 应用邮箱 ID 过滤
-            if (scope.allowedEmailIds) {
-                where.id = { in: scope.allowedEmailIds };
-            }
-
-            // 查询邮箱
-            const [list, total] = await Promise.all([
-                prisma.emailAccount.findMany({
-                    where,
-                    select: {
-                        id: true,
-                        email: true,
-                        tags: true,
-                        groupId: true,
-                        group: { select: { name: true } },
-                    },
-                    skip: (page - 1) * pageSize,
-                    take: pageSize,
-                    orderBy: { id: 'asc' },
-                }),
-                prisma.emailAccount.count({ where }),
-            ]);
-
-            await mailService.logApiCall(
-                'filter_by_tags',
-                request.apiKey.id,
-                undefined,
-                request.ip,
-                200,
-                Date.now() - startTime,
-                request.id
-            );
-
-            return {
-                success: true,
-                data: {
-                    emails: list.map(e => ({
-                        id: e.id,
-                        email: e.email,
-                        tags: e.tags,
-                        groupId: e.groupId,
-                        group: e.group?.name,
-                    })),
-                    total,
-                    page,
-                    pageSize,
-                    excludedTags: tagsArray,
-                },
-            };
-        } catch (err: unknown) {
-            await mailService.logApiCall(
-                'filter_by_tags',
                 request.apiKey?.id,
                 undefined,
                 request.ip,

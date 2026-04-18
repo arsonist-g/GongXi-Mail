@@ -19,7 +19,7 @@
 系统提供灵活的邮箱访问方式：
 
 - **直接访问**：如果您已知目标邮箱地址，可直接调用 `/api/mail_new` 或 `/api/mail_all` 获取邮件，无需任何前置分配操作。
-- **自动分配**：如果你需要一个新的、未使用的邮箱，请调用 `/api/get-email`。这将返回一个随机邮箱并标记为您已使用，避免重复。
+- **标签筛选**：调用 `/api/get-email` 可根据标签筛选邮箱，支持排除特定标签的邮箱，默认返回 1 个邮箱。
 - **文本提速**：对于自动化脚本，推荐使用 `/api/mail_text` 配合正则匹配，直接获取验证码等核心信息。
 
 ---
@@ -30,19 +30,29 @@
 
 **接口**: `POST /api/get-email`  
 **方法**: GET/POST  
-**描述**: 从邮箱池中分配一个未使用的邮箱地址。可通过 `group` 参数限制仅从指定分组中分配。
+**描述**: 根据标签筛选获取邮箱地址。可通过 `excludeTags` 参数排除特定标签的邮箱，通过 `group` 参数限制仅从指定分组中获取。
 
 #### 请求参数
 
 | 参数名 | 类型 | 必填 | 说明 |
 |--------|------|------|------|
-| `group` | string | 否 | 分组名称，仅从该分组中分配 |
+| `excludeTags` | string[] | 否 | 要排除的标签（可传多个） |
+| `group` | string | 否 | 分组名称，仅从该分组中获取 |
+| `page` | number | 否 | 页码（默认 1） |
+| `pageSize` | number | 否 | 每页数量（默认 1，最大 100） |
 
 #### 调用示例
 
 ```bash
+# 获取一个邮箱（不排除任何标签）
 curl -X POST "http://localhost:3000/api/get-email" \
   -H "X-API-Key: sk_your_api_key"
+
+# 排除带有 banned 和 spam 标签的邮箱
+curl -X POST "http://localhost:3000/api/get-email" \
+  -H "X-API-Key: sk_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"excludeTags": ["banned", "spam"]}'
 ```
 
 #### 成功响应
@@ -51,8 +61,19 @@ curl -X POST "http://localhost:3000/api/get-email" \
 {
   "success": true,
   "data": {
-    "email": "example@outlook.com",
-    "id": 1
+    "emails": [
+      {
+        "id": 1,
+        "email": "example@outlook.com",
+        "tags": ["verified"],
+        "groupId": null,
+        "group": null
+      }
+    ],
+    "total": 85,
+    "page": 1,
+    "pageSize": 1,
+    "excludedTags": ["banned", "spam"]
   }
 }
 ```
@@ -63,8 +84,8 @@ curl -X POST "http://localhost:3000/api/get-email" \
 {
   "success": false,
   "error": {
-    "code": "NO_UNUSED_EMAIL",
-    "message": "No unused emails available."
+    "code": "GROUP_NOT_FOUND",
+    "message": "Email group 'premium' not found"
   }
 }
 ```
@@ -324,151 +345,7 @@ curl "http://localhost:3000/api/list-emails" \
 
 ---
 
-### 7. 邮箱池统计
-
-**接口**: `GET /api/pool-stats`  
-**方法**: GET/POST  
-**描述**: 获取当前 API Key 的分配使用情况。支持按分组筛选。
-
-#### 请求参数
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| `group` | string | 否 | 分组名称，仅统计该分组 |
-
-#### 调用示例
-
-```bash
-curl "http://localhost:3000/api/pool-stats" \
-  -H "X-API-Key: sk_your_api_key"
-```
-
-#### 成功响应
-
-```json
-{
-  "success": true,
-  "data": {
-    "total": 100,
-    "used": 3,
-    "remaining": 97
-  }
-}
-```
-
-#### 错误响应
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "AUTH_REQUIRED",
-    "message": "API Key required"
-  }
-}
-```
-
----
-
-### 8. 重置分配记录
-
-**接口**: `POST /api/reset-pool`  
-**方法**: GET/POST  
-**描述**: 重置当前 API Key 的分配记录。支持按分组重置。
-
-#### 请求参数
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| `group` | string | 否 | 分组名称，仅重置该分组 |
-
-#### 调用示例
-
-```bash
-curl -X POST "http://localhost:3000/api/reset-pool" \
-  -H "X-API-Key: sk_your_api_key"
-```
-
-#### 成功响应
-
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Pool reset successfully"
-  }
-}
-```
-
-#### 错误响应
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "AUTH_REQUIRED",
-    "message": "API Key required"
-  }
-}
-```
-
----
-
-### 9. 根据标签反向筛选邮箱
-
-**接口**: `GET /api/filter-by-tags`  
-**方法**: GET  
-**描述**: 返回不包含指定标签的邮箱列表。支持排除多个标签、分页和分组筛选。
-
-#### 请求参数
-
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| `excludeTags` | string[] | 是 | 要排除的标签（可传多个） |
-| `group` | string | 否 | 分组名称（可选） |
-| `page` | number | 否 | 页码（默认 1） |
-| `pageSize` | number | 否 | 每页数量（默认 50，最大 100） |
-
-#### 调用示例
-
-```bash
-curl "http://localhost:3000/api/filter-by-tags?excludeTags=banned&excludeTags=spam&page=1&pageSize=50" \
-  -H "X-API-Key: sk_your_api_key"
-```
-
-#### 成功响应
-
-```json
-{
-  "success": true,
-  "data": {
-    "emails": [
-      { "id": 1, "email": "user1@outlook.com", "tags": ["verified"], "groupId": null, "group": null },
-      { "id": 2, "email": "user2@outlook.com", "tags": [], "groupId": 1, "group": "premium" }
-    ],
-    "total": 85,
-    "page": 1,
-    "pageSize": 50,
-    "excludedTags": ["banned", "spam"]
-  }
-}
-```
-
-#### 错误响应
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_PARAMS",
-    "message": "excludeTags is required"
-  }
-}
-```
-
----
-
-### 10. 给邮箱添加标签
+### 7. 给邮箱添加标签
 
 **接口**: `POST /api/add-tags`  
 **方法**: POST  
@@ -517,7 +394,7 @@ curl -X POST "http://localhost:3000/api/add-tags" \
 
 ---
 
-### 11. 批量导入邮箱
+### 8. 批量导入邮箱
 
 **接口**: `POST /api/import-emails`  
 **方法**: POST  
@@ -600,15 +477,12 @@ curl -X POST "http://localhost:3000/api/import-emails" \
 
 | Action | 含义 |
 |--------|------|
-| `get_email` | 分配邮箱 |
+| `get_email` | 获取邮箱 |
 | `mail_new` | 获取最新邮件 |
 | `mail_text` | 获取邮件文本 |
 | `mail_all` | 获取所有邮件 |
 | `process_mailbox` | 清空邮箱 |
 | `list_emails` | 获取邮箱列表 |
-| `pool_stats` | 邮箱池统计 |
-| `pool_reset` | 重置邮箱池 |
-| `filter_by_tags` | 标签筛选邮箱 |
 | `add_tags` | 添加标签 |
 | `import_emails` | 批量导入邮箱 |
 

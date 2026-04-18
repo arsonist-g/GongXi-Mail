@@ -51,7 +51,6 @@ model ApiKey {
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   creator     Admin        @relation(fields: [createdBy], references: [id])
-  emailUsages EmailUsage[]
   apiLogs     ApiLog[]
 
   @@map("api_keys")
@@ -92,7 +91,6 @@ model EmailAccount {
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
   group   EmailGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  usages  EmailUsage[]
   apiLogs ApiLog[]
 
   @@map("email_accounts")
@@ -117,22 +115,6 @@ model SystemConfig {
   updatedAt                 DateTime @updatedAt @map("updated_at")
 
   @@map("system_config")
-}
-
-// ============================================
-// 邮箱使用记录（邮箱池）
-// ============================================
-model EmailUsage {
-  id             Int      @id @default(autoincrement())
-  apiKeyId       Int      @map("api_key_id")
-  emailAccountId Int      @map("email_account_id")
-  usedAt         DateTime @default(now()) @map("used_at")
-
-  apiKey       ApiKey       @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
-  emailAccount EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
-
-  @@unique([apiKeyId, emailAccountId])
-  @@map("email_usage")
 }
 
 // ============================================

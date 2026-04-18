@@ -5,8 +5,6 @@ export const MAIL_LOG_ACTIONS = {
     MAIL_ALL: 'mail_all',
     PROCESS_MAILBOX: 'process_mailbox',
     LIST_EMAILS: 'list_emails',
-    POOL_STATS: 'pool_stats',
-    POOL_RESET: 'pool_reset',
     IMPORT_EMAILS: 'import_emails',
 } as const;
 
