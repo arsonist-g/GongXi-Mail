@@ -7,6 +7,7 @@ export const MAIL_LOG_ACTIONS = {
     LIST_EMAILS: 'list_emails',
     POOL_STATS: 'pool_stats',
     POOL_RESET: 'pool_reset',
+    IMPORT_EMAILS: 'import_emails',
 } as const;
 
 export type MailLogAction = typeof MAIL_LOG_ACTIONS[keyof typeof MAIL_LOG_ACTIONS];

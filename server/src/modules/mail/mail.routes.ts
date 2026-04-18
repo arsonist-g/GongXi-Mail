@@ -696,6 +696,64 @@ const mailRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     // ========================================
+    // 新增：批量导入邮箱
+    // ========================================
+    fastify.post('/import-emails', async (request) => {
+        const startTime = Date.now();
+        try {
+            if (!request.apiKey?.id) {
+                throw new AppError('AUTH_REQUIRED', 'API Key required', 401);
+            }
+            fastify.assertApiPermission(request, MAIL_LOG_ACTIONS.IMPORT_EMAILS);
+
+            const schema = z.object({
+                content: z.string().min(1),
+                separator: z.string().default('----'),
+                groupId: z.coerce.number().int().positive().optional(),
+            });
+
+            const { content, separator, groupId } = schema.parse(request.body);
+
+            // 如果指定了分组，检查 API Key 是否有权限访问该分组
+            if (groupId !== undefined) {
+                const scope = await poolService.getApiKeyScope(request.apiKey.id);
+                if (scope.allowedGroupIds && !scope.allowedGroupIds.includes(groupId)) {
+                    throw new AppError('GROUP_FORBIDDEN', 'This API Key cannot access the selected group', 403);
+                }
+            }
+
+            // 调用 emailService 的导入方法
+            const result = await emailService.import({ content, separator, groupId });
+
+            await mailService.logApiCall(
+                MAIL_LOG_ACTIONS.IMPORT_EMAILS,
+                request.apiKey.id,
+                undefined,
+                request.ip,
+                200,
+                Date.now() - startTime,
+                request.id
+            );
+
+            return {
+                success: true,
+                data: result,
+            };
+        } catch (err: unknown) {
+            await mailService.logApiCall(
+                MAIL_LOG_ACTIONS.IMPORT_EMAILS,
+                request.apiKey?.id,
+                undefined,
+                request.ip,
+                getErrorStatusCode(err),
+                Date.now() - startTime,
+                request.id
+            );
+            throw err;
+        }
+    });
+
+    // ========================================
     // 新增：给邮箱添加标签
     // ========================================
     fastify.post('/add-tags', async (request) => {

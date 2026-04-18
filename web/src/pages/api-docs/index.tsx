@@ -23,6 +23,7 @@ const ApiDocsPage: React.FC = () => {
     pool_reset: '重置邮箱池',
     filter_by_tags: '标签筛选邮箱',
     add_tags: '添加标签',
+    import_emails: '批量导入邮箱',
   };
 
   const logActionRows = LOG_ACTION_OPTIONS.map((item) => ({
@@ -329,7 +330,7 @@ curl "${baseUrl}/api/mail_text?email=example@outlook.com&match=\\d{6}" \\
   "data": {
     "email": "user@outlook.com",
     "tags": ["verified", "premium", "openai"],
-    "message": "Tags added successfully"
+    "addedTags": ["verified", "premium"]
   }
 }`,
       errorResponse: `{
@@ -337,6 +338,40 @@ curl "${baseUrl}/api/mail_text?email=example@outlook.com&match=\\d{6}" \\
   "error": {
     "code": "EMAIL_NOT_FOUND",
     "message": "Email account not found"
+  }
+}`,
+    },
+    {
+      name: '批量导入邮箱',
+      method: 'POST',
+      path: '/api/import-emails',
+      description: '批量导入邮箱账户。支持多种格式，自动识别并创建或更新邮箱。支持 3 列、4 列、5 列格式。',
+      params: [
+        { name: 'content', type: 'string', required: true, desc: '邮箱数据内容（多行文本）' },
+        { name: 'separator', type: 'string', required: false, desc: '分隔符，默认 ----' },
+        { name: 'groupId', type: 'number', required: false, desc: '分组 ID（可选）' },
+      ],
+      example: `curl -X POST "${baseUrl}/api/import-emails" \\
+  -H "X-API-Key: sk_your_api_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "content": "user1@outlook.com----client123----token123\\nuser2@outlook.com----pass456----client456----token456",
+    "separator": "----",
+    "groupId": 1
+  }'`,
+      successResponse: `{
+  "success": true,
+  "data": {
+    "success": 2,
+    "failed": 0,
+    "errors": []
+  }
+}`,
+      errorResponse: `{
+  "success": false,
+  "error": {
+    "code": "GROUP_FORBIDDEN",
+    "message": "This API Key cannot access the selected group"
   }
 }`,
     },

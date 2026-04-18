@@ -133,109 +133,21 @@ npm run test
 
 ## API 文档
 
-### 外部 API (`/api/*`)
+详细的 API 文档请查看：[API.md](./API.md)
 
-需要在 HTTP Header 中携带 API Key：`X-API-Key: sk_xxx`
+### 快速开始
 
-#### 接口列表
+外部 API 需要在 HTTP Header 中携带 API Key：`X-API-Key: sk_xxx`
 
-| 接口 | 说明 | 注意事项 |
-|------|------|----------|
-| `/api/get-email` | 获取一个未使用的邮箱地址 | 会标记为当前 Key 已使用 |
-| `/api/mail_new` | 获取最新邮件 | - |
-| `/api/mail_text` | 获取最新邮件文本 (脚本友好) | 可用正则提取内容 |
-| `/api/mail_all` | 获取所有邮件 | - |
-| `/api/process-mailbox` | 清空邮箱 | `data.deletedCount` 为删除数量 |
-| `/api/list-emails` | 获取系统所有可用邮箱 | - |
-| `/api/pool-stats` | 邮箱池统计 | - |
-| `/api/reset-pool` | 重置分配记录 | 释放当前 Key 占用的所有邮箱标记 |
-| `/api/filter-by-tags` | 根据标签反向筛选邮箱 | 返回不包含指定标签的邮箱 |
-| `/api/add-tags` | 给邮箱添加标签 | 支持批量添加，自动去重 |
+常用接口：
+- `/api/get-email` - 获取一个未使用的邮箱地址
+- `/api/mail_new` - 获取最新邮件
+- `/api/mail_text` - 获取邮件文本（脚本友好，支持正则提取）
+- `/api/import-emails` - 批量导入邮箱
+- `/api/add-tags` - 给邮箱添加标签
+- `/api/filter-by-tags` - 根据标签筛选邮箱
 
-#### 使用流程
-
-1. **获取邮箱**：
-   ```bash
-   curl -X POST "/api/get-email" -H "X-API-Key: sk_xxx"
-   # {"success": true, "data": {"email": "xxx@outlook.com"}}
-   ```
-
-2. **获取邮件内容 (推荐)**：
-   自动提取验证码（6位数字）：
-   ```bash
-   curl "/api/mail_text?email=xxx@outlook.com&match=\\d{6}" -H "X-API-Key: sk_xxx"
-   # 返回: 123456
-   ```
-
-3. **获取完整邮件 (JSON)**：
-   ```bash
-   curl -X POST "/api/mail_new" -H "X-API-Key: sk_xxx" \
-     -d '{"email": "xxx@outlook.com"}'
-   ```
-
-4. **标签管理**：
-   添加标签：
-   ```bash
-   curl -X POST "/api/add-tags" -H "X-API-Key: sk_xxx" \
-     -d '{"email": "xxx@outlook.com", "tags": ["verified", "premium"]}'
-   ```
-   
-   筛选邮箱（排除特定标签）：
-   ```bash
-   curl "/api/filter-by-tags?excludeTags=banned&excludeTags=spam&page=1&pageSize=50" \
-     -H "X-API-Key: sk_xxx"
-   ```
-
-#### 参数说明
-
-**通用参数**：
-| 参数 | 说明 |
-|------|------|
-| email | 邮箱地址（必填） |
-| mailbox | 文件夹：inbox/junk |
-| socks5 | SOCKS5 代理 |
-| http | HTTP 代理 |
-
-**`/api/mail_text` 专用参数**：
-| 参数 | 说明 |
-|------|------|
-| match | 正则表达式，用于提取特定内容 (例如 `\d{6}`) |
-
-**`/api/filter-by-tags` 参数**：
-| 参数 | 说明 |
-|------|------|
-| excludeTags | 要排除的标签（字符串或数组） |
-| group | 分组名称（可选） |
-| page | 页码（默认 1） |
-| pageSize | 每页数量（默认 50，最大 100） |
-
-**`/api/add-tags` 参数**：
-| 参数 | 说明 |
-|------|------|
-| email | 邮箱地址（必填） |
-| tags | 标签数组（必填，至少 1 个） |
-
-## 操作日志 Action 命名
-
-`/admin/dashboard/logs` 中 `action` 字段使用以下固定值：
-
-| Action | 含义 |
-|--------|------|
-| `get_email` | 分配邮箱 |
-| `mail_new` | 获取最新邮件 |
-| `mail_text` | 获取邮件文本 |
-| `mail_all` | 获取所有邮件 |
-| `process_mailbox` | 清空邮箱 |
-| `list_emails` | 获取邮箱列表 |
-| `pool_stats` | 邮箱池统计 |
-| `pool_reset` | 重置邮箱池 |
-| `filter_by_tags` | 标签筛选邮箱 |
-| `add_tags` | 添加标签 |
-
-## API Key 权限键
-
-API Key 的 `permissions` 使用与上表一致的 action 值（如 `mail_new`、`process_mailbox`）。  
-未配置 `permissions` 时默认允许全部接口。
+更多接口和详细说明请参考 [API.md](./API.md)。
 
 ## 生产配置要求
 
