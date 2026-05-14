@@ -6,6 +6,7 @@ export const mailRequestSchema = z.object({
     mailbox: z.string().default('inbox'),
     socks5: z.string().optional(),
     http: z.string().optional(),
+    fullText: z.boolean().or(z.string().transform(v => v !== 'false' && v !== '0')).default(true),
 });
 
 export type MailRequestInput = z.infer<typeof mailRequestSchema>;

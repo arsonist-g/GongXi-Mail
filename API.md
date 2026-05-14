@@ -165,12 +165,17 @@ curl -X POST "http://localhost:3000/api/mail_new" \
 |--------|------|------|------|
 | `email` | string | 是 | 邮箱地址 |
 | `match` | string | 否 | 正则表达式 (例如 `\d{6}`) |
+| `fullText` | boolean | 否 | 是否获取完整纯文本（默认 `true`）。启用时 Graph API 邮箱返回完整文本内容，链接等信息不会被截断 |
 
 #### 调用示例
 
 ```bash
 # 获取验证码
 curl "http://localhost:3000/api/mail_text?email=example@outlook.com&match=\d{6}" \
+  -H "X-API-Key: sk_your_api_key"
+
+# 提取邮件中的链接
+curl "http://localhost:3000/api/mail_text?email=example@outlook.com&match=https?://[^\s]+" \
   -H "X-API-Key: sk_your_api_key"
 ```
 
@@ -202,11 +207,16 @@ Error: No match found
 | `mailbox` | string | 否 | 邮件文件夹，默认 `inbox` |
 | `socks5` | string | 否 | SOCKS5 代理地址 |
 | `http` | string | 否 | HTTP 代理地址 |
+| `fullText` | boolean | 否 | 是否获取完整纯文本（默认 `true`）。启用时 Graph API 邮箱的 text/html 字段返回完整纯文本内容；设为 `false` 时 html 字段返回原始 HTML |
 
 #### 调用示例
 
 ```bash
 curl "http://localhost:3000/api/mail_all?email=example@outlook.com" \
+  -H "X-API-Key: sk_your_api_key"
+
+# 获取原始 HTML 格式（用于渲染）
+curl "http://localhost:3000/api/mail_all?email=example@outlook.com&fullText=false" \
   -H "X-API-Key: sk_your_api_key"
 ```
 
@@ -483,6 +493,9 @@ curl -X POST "http://localhost:3000/api/import-emails" \
 | `mail_all` | 获取所有邮件 |
 | `process_mailbox` | 清空邮箱 |
 | `list_emails` | 获取邮箱列表 |
+| `pool_stats` | 邮箱池统计 |
+| `pool_reset` | 重置邮箱池 |
+| `filter_by_tags` | 标签筛选邮箱 |
 | `add_tags` | 添加标签 |
 | `import_emails` | 批量导入邮箱 |
 

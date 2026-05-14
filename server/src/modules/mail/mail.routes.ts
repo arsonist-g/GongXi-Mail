@@ -14,12 +14,14 @@ const mailRequestSchema = z.object({
     mailbox: z.string().default('inbox'),
     socks5: z.string().optional(),
     http: z.string().optional(),
+    fullText: z.boolean().or(z.string().transform(v => v !== 'false' && v !== '0')).default(true),
 });
 
 // 纯文本邮件请求 Schema
 const mailTextRequestSchema = z.object({
     email: z.string().email(),
     match: z.string().optional(), // 正则表达式 (可选)
+    fullText: z.boolean().or(z.string().transform(v => v !== 'false' && v !== '0')).default(true),
 });
 
 function getErrorStatusCode(err: unknown): number {
@@ -303,6 +305,7 @@ const mailRoutes: FastifyPluginAsync = async (fastify) => {
             const result = await mailService.getEmails(credentials, {
                 mailbox: 'inbox',
                 limit: 1, // 只取最新一封
+                fullText: input.fullText,
             });
 
             await mailService.updateEmailStatus(credentials.id, true);
@@ -394,6 +397,7 @@ const mailRoutes: FastifyPluginAsync = async (fastify) => {
                 mailbox: input.mailbox,
                 socks5: input.socks5,
                 http: input.http,
+                fullText: input.fullText,
             });
 
             await mailService.updateEmailStatus(credentials.id, true);

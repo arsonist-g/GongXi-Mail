@@ -200,7 +200,8 @@ export const mailService = {
         accessToken: string,
         mailbox: string,
         limit: number = 100,
-        proxyConfig?: { socks5?: string; http?: string }
+        proxyConfig?: { socks5?: string; http?: string },
+        fullText: boolean = false
     ): Promise<EmailMessage[]> {
         // 转换邮箱名称
         let folder = 'inbox';
@@ -211,14 +212,19 @@ export const mailService = {
         }
 
         try {
+            const headers: Record<string, string> = {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            };
+            if (fullText) {
+                headers['Prefer'] = 'outlook.body-content-type="text"';
+            }
+
             const response = await proxyFetch(
                 `https://graph.microsoft.com/v1.0/me/mailFolders/${folder}/messages?$top=${limit}&$orderby=receivedDateTime desc`,
                 {
                     method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                        'Content-Type': 'application/json',
-                    },
+                    headers,
                 },
                 proxyConfig
             );
@@ -230,6 +236,20 @@ export const mailService = {
 
             const data = await response.json() as GraphMessagesResponse;
             const emails = Array.isArray(data.value) ? data.value : [];
+
+            if (fullText) {
+                return emails.map((item: GraphMessage, index: number) => {
+                    const textContent = item.body?.content || item.bodyPreview || '';
+                    return {
+                        id: item.id || `graph_${Date.now()}_${index}`,
+                        from: item.from?.emailAddress?.address || '',
+                        subject: item.subject || '',
+                        text: textContent,
+                        html: textContent,
+                        date: item.createdDateTime || '',
+                    };
+                });
+            }
 
             return emails.map((item: GraphMessage, index: number) => ({
                 id: item.id || `graph_${Date.now()}_${index}`,
@@ -432,11 +452,12 @@ export const mailService = {
      */
     async getEmails(
         credentials: Credentials,
-        options: { mailbox: string; limit?: number; socks5?: string; http?: string }
+        options: { mailbox: string; limit?: number; socks5?: string; http?: string; fullText?: boolean }
     ) {
         const proxyConfig = { socks5: options.socks5, http: options.http };
         const strategy: MailFetchStrategy = credentials.fetchStrategy || 'GRAPH_FIRST';
         const limit = options.limit || 100;
+        const fullText = options.fullText ?? false;
 
         const fetchViaGraph = async () => {
             const tokenResult = await this.getGraphAccessToken(credentials, proxyConfig);
@@ -452,7 +473,8 @@ export const mailService = {
                 tokenResult.accessToken,
                 options.mailbox,
                 limit,
-                proxyConfig
+                proxyConfig,
+                fullText
             );
 
             return {
