@@ -44,10 +44,18 @@ export const listEmailSchema = z.object({
     ),
 });
 
+export const ColumnMappingSchema = z.object({
+    email: z.number().int().min(0).default(0),
+    clientId: z.number().int().min(0).default(1),
+    refreshToken: z.number().int().min(0).default(2),
+    password: z.number().int().min(0).optional(),
+});
+
 export const importEmailSchema = z.object({
     content: z.string().min(1),
     separator: z.string().default('----'),
     groupId: z.coerce.number().int().positive().optional(),
+    columnMapping: ColumnMappingSchema.optional(),
 });
 
 export type CreateEmailInput = z.infer<typeof createEmailSchema>;

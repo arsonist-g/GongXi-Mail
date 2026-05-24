@@ -481,10 +481,10 @@ export const emailApi = {
             }
         ),
 
-    import: (content: string, separator?: string, groupId?: number) =>
-        requestPost<Record<string, unknown>, { content: string; separator?: string; groupId?: number }>(
+    import: (content: string, separator?: string, groupId?: number, columnMapping?: { email: number; clientId: number; refreshToken: number; password?: number }) =>
+        requestPost<{ success: number; failed: number; errors: string[] }, { content: string; separator?: string; groupId?: number; columnMapping?: { email: number; clientId: number; refreshToken: number; password?: number } }>(
             '/admin/emails/import',
-            { content, separator, groupId },
+            { content, separator, groupId, columnMapping },
             {
                 invalidatePrefixes: ['/admin/emails', '/admin/email-groups', '/admin/api-keys', '/admin/dashboard/stats'],
             }

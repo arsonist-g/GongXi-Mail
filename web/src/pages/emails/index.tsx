@@ -30,6 +30,7 @@ import {
     GroupOutlined,
     SyncOutlined,
 } from '@ant-design/icons';
+import { Checkbox, InputNumber } from 'antd';
 import { emailApi, groupApi } from '../../api';
 import { getErrorMessage } from '../../utils/error';
 import { requestData } from '../../utils/request';
@@ -115,6 +116,12 @@ const EmailsPage: React.FC = () => {
     const [importContent, setImportContent] = useState('');
     const [separator, setSeparator] = useState('----');
     const [importGroupId, setImportGroupId] = useState<number | undefined>(undefined);
+    const [columnMapping, setColumnMapping] = useState<{ email: number; clientId: number; refreshToken: number; password?: number }>({
+        email: 0,
+        clientId: 1,
+        refreshToken: 2,
+    });
+    const [enablePasswordColumn, setEnablePasswordColumn] = useState(false);
     const [mailList, setMailList] = useState<MailItem[]>([]);
     const [mailLoading, setMailLoading] = useState(false);
     const [currentEmail, setCurrentEmail] = useState<string>('');
@@ -322,16 +329,29 @@ const EmailsPage: React.FC = () => {
         }
 
         try {
+            const mapping = { ...columnMapping };
+            if (!enablePasswordColumn) {
+                delete mapping.password;
+            }
             const res = await emailApi.import(
                 importContent,
                 separator,
-                toOptionalNumber(importGroupId)
+                toOptionalNumber(importGroupId),
+                mapping
             );
             if (res.code === 200) {
-                message.success(res.message);
+                const importResult = res.data as { success: number; failed: number; errors?: string[] } | undefined;
+                if (importResult && importResult.failed > 0) {
+                    const errMsg = importResult.errors?.slice(0, 3).join('\n') || '';
+                    message.warning(`导入完成：成功 ${importResult.success}，失败 ${importResult.failed}${errMsg ? `\n${errMsg}` : ''}`, 8);
+                } else {
+                    message.success(res.message || '导入成功');
+                }
                 setImportModalVisible(false);
                 setImportContent('');
                 setImportGroupId(undefined);
+                setColumnMapping({ email: 0, clientId: 1, refreshToken: 2 });
+                setEnablePasswordColumn(false);
                 fetchData();
                 fetchGroups();
             } else {
@@ -990,7 +1010,11 @@ const EmailsPage: React.FC = () => {
                 title="批量导入邮箱"
                 open={importModalVisible}
                 onOk={handleImport}
-                onCancel={() => setImportModalVisible(false)}
+                onCancel={() => {
+                    setImportModalVisible(false);
+                    setColumnMapping({ email: 0, clientId: 1, refreshToken: 2 });
+                    setEnablePasswordColumn(false);
+                }}
                 destroyOnClose
                 width={700}
             >
@@ -1016,6 +1040,16 @@ const EmailsPage: React.FC = () => {
                         onChange={(value: number | string | undefined) => setImportGroupId(toOptionalNumber(value))}
                         style={{ width: 260 }}
                     />
+                    <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>列位置映射：</Text>
+                        <span>邮箱 <InputNumber size="small" min={0} max={20} style={{ width: 64 }} value={columnMapping.email} onChange={(v) => setColumnMapping(p => ({ ...p, email: v ?? 0 }))} /></span>
+                        <span>客户端ID <InputNumber size="small" min={0} max={20} style={{ width: 64 }} value={columnMapping.clientId} onChange={(v) => setColumnMapping(p => ({ ...p, clientId: v ?? 1 }))} /></span>
+                        <span>刷新令牌 <InputNumber size="small" min={0} max={20} style={{ width: 64 }} value={columnMapping.refreshToken} onChange={(v) => setColumnMapping(p => ({ ...p, refreshToken: v ?? 2 }))} /></span>
+                        <Checkbox checked={enablePasswordColumn} onChange={(e) => setEnablePasswordColumn(e.target.checked)}>密码</Checkbox>
+                        {enablePasswordColumn && (
+                            <InputNumber size="small" min={0} max={20} style={{ width: 64 }} value={columnMapping.password} onChange={(v) => setColumnMapping(p => ({ ...p, password: v ?? 0 }))} />
+                        )}
+                    </div>
                     <Dragger
                         beforeUpload={(file) => {
                             const reader = new FileReader();

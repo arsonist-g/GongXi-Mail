@@ -271,34 +271,37 @@ export const emailService = {
         for (const line of lines) {
             try {
                 const parts = line.trim().split(separator);
-                if (parts.length < 3) {
-                    throw new Error('Invalid format');
-                }
-
                 let email, clientId, refreshToken, password;
 
-                // 尝试猜测格式
-                // 1. email----password----clientId----refreshToken (4列)
-                // 2. email----clientId----refreshToken (3列)
-                // 3. email----clientId----uuid----info----refreshToken (5列)
-
-                if (parts.length >= 5) {
-                    // email----clientId----uuid----info----refreshToken
-                    email = parts[0];
-                    clientId = parts[1];
-                    refreshToken = parts[4];
-                    // 这种格式通常没有密码，或者密码隐藏在 info 里？暂且不处理密码
-                } else if (parts.length === 4) {
-                    // email----password----clientId----refreshToken
-                    email = parts[0];
-                    password = parts[1];
-                    clientId = parts[2];
-                    refreshToken = parts[3];
+                if (input.columnMapping) {
+                    const { email: emailIdx, clientId: clientIdIdx, refreshToken: refreshTokenIdx, password: passwordIdx } = input.columnMapping;
+                    const maxIdx = Math.max(emailIdx, clientIdIdx, refreshTokenIdx, passwordIdx ?? -1);
+                    if (parts.length <= maxIdx) {
+                        throw new Error(`列数不足：需要至少 ${maxIdx + 1} 列，实际 ${parts.length} 列`);
+                    }
+                    email = parts[emailIdx];
+                    clientId = parts[clientIdIdx];
+                    refreshToken = parts[refreshTokenIdx];
+                    if (passwordIdx !== undefined) password = parts[passwordIdx];
                 } else {
-                    // email----clientId----refreshToken
-                    email = parts[0];
-                    clientId = parts[1];
-                    refreshToken = parts[2];
+                    // 自动检测格式（向后兼容）
+                    if (parts.length >= 5) {
+                        // email----clientId----uuid----info----refreshToken
+                        email = parts[0];
+                        clientId = parts[1];
+                        refreshToken = parts[4];
+                    } else if (parts.length === 4) {
+                        // email----password----clientId----refreshToken
+                        email = parts[0];
+                        password = parts[1];
+                        clientId = parts[2];
+                        refreshToken = parts[3];
+                    } else {
+                        // email----clientId----refreshToken
+                        email = parts[0];
+                        clientId = parts[1];
+                        refreshToken = parts[2];
+                    }
                 }
 
                 if (!email || !clientId || !refreshToken) {
